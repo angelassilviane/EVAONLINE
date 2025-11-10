@@ -5,10 +5,16 @@ Permite mapear nomes de variáveis específicos de cada fonte (API)
 para nomes padronizados usados internamente pela aplicação.
 """
 
-from sqlalchemy import Boolean, Column, Integer, String, UniqueConstraint
-from sqlalchemy import Index
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 
-from ..connection import Base
+from backend.database.connection import Base
 
 
 class APIVariables(Base):

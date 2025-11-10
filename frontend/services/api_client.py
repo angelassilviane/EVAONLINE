@@ -1,4 +1,4 @@
-﻿"""
+"""
 Cliente HTTP para integração com API backend.
 
 Fornece métodos para chamar endpoints da API FastAPI

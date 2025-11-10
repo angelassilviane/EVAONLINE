@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from .connection import get_db_context
-from .models import APIVariables, ClimateData
+from backend.database.connection import get_db_context
+from backend.database.models import APIVariables, ClimateData
 
 
 # ==============================================================================

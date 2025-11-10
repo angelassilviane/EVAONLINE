@@ -10,8 +10,8 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from .connection import SessionLocal, engine
-from .redis_pool import get_redis_client
+from backend.database.connection import SessionLocal, engine
+from backend.database.redis_pool import get_redis_client
 
 
 def check_database_connection() -> Dict[str, Any]:
@@ -26,7 +26,9 @@ def check_database_connection() -> Dict[str, Any]:
     try:
         with SessionLocal() as session:
             # Query simples para testar conexão
-            result = session.execute(text("SELECT 1 as health_check")).fetchone()
+            result = session.execute(
+                text("SELECT 1 as health_check")
+            ).fetchone()
             response_time = time.time() - start_time
 
             if result and result[0] == 1:
@@ -131,11 +133,15 @@ def get_database_metrics() -> Dict[str, Any]:
             tables_result = session.execute(tables_query).fetchone()
 
             return {
-                "active_connections": (connections_result[0] if connections_result else 0),
+                "active_connections": (
+                    connections_result[0] if connections_result else 0
+                ),
                 "database_size": size_result[0] if size_result else "unknown",
                 "table_count": tables_result[0] if tables_result else 0,
                 "pool_size": getattr(engine.pool, "size", lambda: 0)(),
-                "pool_checked_out": getattr(engine.pool, "checkedout", lambda: 0)(),
+                "pool_checked_out": getattr(
+                    engine.pool, "checkedout", lambda: 0
+                )(),
                 "pool_overflow": getattr(engine.pool, "overflow", lambda: 0)(),
             }
 
@@ -150,7 +156,11 @@ def perform_full_health_check() -> Dict[str, Any]:
     Returns:
         Dict com status geral e detalhes de cada componente
     """
-    results = {"timestamp": time.time(), "overall_status": "healthy", "checks": {}}
+    results = {
+        "timestamp": time.time(),
+        "overall_status": "healthy",
+        "checks": {},
+    }
 
     # Verificar banco de dados
     db_check = check_database_connection()
@@ -165,7 +175,10 @@ def perform_full_health_check() -> Dict[str, Any]:
         results["metrics"] = get_database_metrics()
 
     # Determinar status geral
-    unhealthy_condition = db_check["status"] == "unhealthy" or redis_check["status"] == "unhealthy"
+    unhealthy_condition = (
+        db_check["status"] == "unhealthy"
+        or redis_check["status"] == "unhealthy"
+    )
     if unhealthy_condition:
         results["overall_status"] = "unhealthy"
 
@@ -186,9 +199,15 @@ def database_monitoring_context(operation_name: str):
         yield
         duration = time.time() - start_time
         # Aqui poderia enviar métricas para Prometheus/monitoring
-        logger.info(f"Database operation '{operation_name}' " f"completed in {duration:.3f}s")
+        logger.info(
+            f"Database operation '{operation_name}' "
+            f"completed in {duration:.3f}s"
+        )
 
     except Exception as e:
         duration = time.time() - start_time
-        logger.error(f"Database operation '{operation_name}' " f"failed after {duration:.3f}s: {e}")
+        logger.error(
+            f"Database operation '{operation_name}' "
+            f"failed after {duration:.3f}s: {e}"
+        )
         raise

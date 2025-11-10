@@ -1,4 +1,4 @@
-﻿"""
+"""
 Métricas globais do Prometheus para a aplicação EVAonline.
 Centraliza todas as definições de métricas para evitar duplicação.
 """

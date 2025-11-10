@@ -1,5 +1,6 @@
 """
 MET Norway Locationforecast 2.0 Client with hourly-to-daily aggregation.
+Usar somente "MET Norway" para MET Norway LocationForecast 2.0.
 
 Documentation:
 - https://api.met.no/weatherapi/locationforecast/2.0/documentation
@@ -41,8 +42,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 
-class METNorwayLocationForecastConfig(BaseModel):
-    """MET Norway Locationforecast 2.0 API configuration."""
+class METNorwayConfig(BaseModel):
+    """MET Norway API configuration."""
 
     # Base URL (GLOBAL, not just Europe)
     base_url: str = os.getenv(
@@ -65,7 +66,7 @@ class METNorwayLocationForecastConfig(BaseModel):
 
 
 class METNorwayDailyData(BaseModel):
-    """Daily aggregated data from MET Norway Locationforecast API.
+    """Daily aggregated data from MET Norway API.
 
     Field names match our standardized output schema, but are calculated
     from MET Norway's API variable names:
@@ -98,9 +99,7 @@ class METNorwayDailyData(BaseModel):
         None,
         description="Mean wind speed at 2m (m/s) - converted from 10m using FAO-56",
     )
-    source: str = Field(
-        default="met_norway_locationforecast", description="Data source"
-    )
+    source: str = Field(default="met_norway", description="Data source")
 
 
 class METNorwayCacheMetadata(BaseModel):
@@ -117,9 +116,9 @@ class METNorwayCacheMetadata(BaseModel):
     )
 
 
-class METNorwayLocationForecastClient:
+class METNorwayClient:
     """
-    MET Norway Locationforecast 2.0 client with
+    MET Norway client with
     GLOBAL coverage and DAILY data support.
 
     Regional Quality Strategy:
@@ -175,17 +174,17 @@ class METNorwayLocationForecastClient:
 
     def __init__(
         self,
-        config: METNorwayLocationForecastConfig | None = None,
+        config: METNorwayConfig | None = None,
         cache: Any | None = None,
     ):
         """
-        Initialize MET Norway Locationforecast 2.0 client (GLOBAL).
+        Initialize MET Norway client (GLOBAL).
 
         Args:
             config: Custom configuration (optional)
             cache: ClimateCacheService (optional)
         """
-        self.config = config or METNorwayLocationForecastConfig()
+        self.config = config or METNorwayConfig()
 
         # Required headers
         headers = {
@@ -208,7 +207,7 @@ class METNorwayLocationForecastClient:
         Convert wind speed from 10m height to 2m height using FAO-56 formula.
 
         The FAO-56 Penman-Monteith equation requires wind speed at 2m height.
-        MET Norway Locationforecast reports wind at 10m (standard meteorological height).
+        MET Norway reports wind at 10m (standard meteorological height).
 
         Formula (FAO-56 Irrigation and Drainage Paper 56, Eq. 47):
             u2 = uz × [4.87 / ln(67.8 × z - 5.42)]
@@ -386,7 +385,7 @@ class METNorwayLocationForecastClient:
         max_forecast_date = now + timedelta(days=5)
         if end_date and end_date > max_forecast_date:
             msg = (
-                f"MET Norway Locationforecast standardized to 5-day "
+                f"MET Norway standardized to 5-day "
                 f"forecast. Requested date: {end_date}, "
                 f"limit: {max_forecast_date}"
             )
@@ -411,7 +410,7 @@ class METNorwayLocationForecastClient:
         region_label = "NORDIC (1km)" if in_nordic else "GLOBAL (9km)"
 
         logger.info(
-            f"📍 MET Norway Locationforecast ({region_label}): "
+            f"📍 MET Norway ({region_label}): "
             f"lat={lat}, lon={lon}, variables={len(variables)}"
         )
 
@@ -432,10 +431,7 @@ class METNorwayLocationForecastClient:
                     cached_metadata.expires
                     and datetime.now() < cached_metadata.expires
                 ):
-                    logger.info(
-                        "🎯 Cache HIT (not expired): "
-                        "MET Norway Locationforecast"
-                    )
+                    logger.info("🎯 Cache HIT (not expired): " "MET Norway")
                     return cached_metadata.data
 
                 # Data expired - try conditional request with If-Modified-Since
@@ -449,7 +445,7 @@ class METNorwayLocationForecastClient:
             last_modified = None
 
         # 2. Fetch from API (with conditional request if possible)
-        logger.info("Querying MET Norway Locationforecast API...")
+        logger.info("Querying MET Norway API...")
 
         # Request parameters
         params: dict[str, float | str] = {
@@ -468,7 +464,7 @@ class METNorwayLocationForecastClient:
         for attempt in range(self.config.retry_attempts):
             try:
                 logger.debug(
-                    f"MET Norway Locationforecast request "
+                    f"MET Norway request "
                     f"(attempt {attempt + 1}/{self.config.retry_attempts}): "
                     f"lat={lat}, lon={lon}"
                 )
@@ -553,8 +549,7 @@ class METNorwayLocationForecastClient:
                 )
 
                 logger.info(
-                    f"MET Norway Locationforecast: "
-                    f"{len(parsed_data)} days retrieved"
+                    f"MET Norway: " f"{len(parsed_data)} days retrieved"
                 )
 
                 # 3. Save to cache with metadata
@@ -572,7 +567,7 @@ class METNorwayLocationForecastClient:
                     # Save to cache
                     await self.cache.set(cache_metadata_key, metadata, ttl=ttl)
                     logger.debug(
-                        f"Cache SAVE: MET Norway Locationforecast "
+                        f"Cache SAVE: MET Norway"
                         f"(TTL: {ttl}s, expires: {expires_dt})"
                     )
 
@@ -583,7 +578,7 @@ class METNorwayLocationForecastClient:
                     # Don't retry on rate limiting
                     raise
                 logger.warning(
-                    f"MET Norway Locationforecast request failed "
+                    f"MET Norway request failed "
                     f"(attempt {attempt + 1}): {e}"
                 )
                 if attempt == self.config.retry_attempts - 1:
@@ -592,7 +587,7 @@ class METNorwayLocationForecastClient:
 
             except httpx.HTTPError as e:
                 logger.warning(
-                    f"MET Norway Locationforecast request failed "
+                    f"MET Norway request failed "
                     f"(attempt {attempt + 1}): {e}"
                 )
                 if attempt == self.config.retry_attempts - 1:
@@ -637,7 +632,7 @@ class METNorwayLocationForecastClient:
         end_date: datetime,
     ) -> list[METNorwayDailyData]:
         """
-        Process MET Norway Locationforecast API response.
+        Process MET Norway API response.
 
         Aggregates hourly data to daily with proper handling of:
         - Instant values (mean aggregation with NaN handling)
@@ -677,7 +672,7 @@ class METNorwayLocationForecastClient:
             timeseries = data.get("properties", {}).get("timeseries", [])
 
             if not timeseries:
-                logger.warning("MET Norway Locationforecast: no data")
+                logger.warning("MET Norway: no data")
                 return []
 
             # Group data by day
@@ -863,7 +858,7 @@ class METNorwayLocationForecastClient:
             result.sort(key=lambda x: x.date)
 
             logger.info(
-                f"MET Norway Locationforecast parsed: {len(result)} days "
+                f"MET Norway parsed: {len(result)} days "
                 f"from {len(timeseries)} hourly entries"
             )
             return result
@@ -884,7 +879,7 @@ class METNorwayLocationForecastClient:
 
     async def health_check(self) -> bool:
         """
-        Check if MET Norway Locationforecast API is accessible.
+        Check if MET Norway API is accessible.
 
         Returns:
             True if API responds successfully, False otherwise
@@ -901,13 +896,11 @@ class METNorwayLocationForecastClient:
             )
             response.raise_for_status()
 
-            logger.info("MET Norway Locationforecast health check: OK")
+            logger.info("MET Norway health check: OK")
             return True
 
         except Exception as e:
-            logger.error(
-                f"MET Norway Locationforecast health check failed: {e}"
-            )
+            logger.error(f"MET Norway health check failed: {e}")
             return False
 
     def get_attribution(self) -> str:
@@ -986,17 +979,17 @@ class METNorwayLocationForecastClient:
 
 
 # Factory function
-def create_met_norway_locationforecast_client(
+def create_met_norway_client(
     cache: Any | None = None,
-) -> METNorwayLocationForecastClient:
+) -> METNorwayClient:
     """
-    Factory function to create MET Norway Locationforecast 2.0 client
+    Factory function to create MET Norway client
     (GLOBAL coverage).
 
     Args:
         cache: Optional ClimateCacheService instance
 
     Returns:
-        Configured METNorwayLocationForecastClient instance
+        Configured METNorwayClient instance
     """
-    return METNorwayLocationForecastClient(cache=cache)
+    return METNorwayClient(cache=cache)

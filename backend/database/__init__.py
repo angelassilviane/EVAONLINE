@@ -4,7 +4,7 @@ Inicializa e configura o banco de dados.
 
 from loguru import logger
 
-from .connection import Base, engine
+from backend.database.connection import Base, engine
 
 
 def init_db():

@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 
-from ..connection import Base
+from backend.database.connection import Base
 
 
 class ClimateData(Base):

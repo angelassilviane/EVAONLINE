@@ -1,9 +1,9 @@
 """
-Adapter síncrono para MET Norway Locationforecast 2.0.
+Adapter síncrono para MET Norway 2.0.
 
 GLOBAL com dados DIÁRIOS e ESTRATÉGIA REGIONAL.
 
-Este adapter permite usar o cliente assíncrono Locationforecast
+Este adapter permite usar o cliente assíncrono MET Norway
 em código síncrono, facilitando a integração com data_download.py.
 
 Características:
@@ -28,29 +28,28 @@ from loguru import logger
 
 from .met_norway_client import (
     METNorwayDailyData,
-    METNorwayLocationForecastClient,
-    METNorwayLocationForecastConfig,
+    METNorwayClient,
+    METNorwayConfig,
 )
 
 
-class METNorwayLocationForecastSyncAdapter:
+class METNorwaySyncAdapter:
     """
-    Adapter síncrono para MET Norway Locationforecast 2.0.
+    Adapter síncrono para MET Norway.
+    Usar somente "MET Norway" para MET Norway.
     """
 
     def __init__(
         self,
-        config: METNorwayLocationForecastConfig | None = None,
+        config: METNorwayConfig | None = None,
         cache: Any | None = None,
     ):
         """
-        Inicializa adapter GLOBAL do Locationforecast.
+        Inicializa adapter GLOBAL do MET Norway.
         """
-        self.config = config or METNorwayLocationForecastConfig()
+        self.config = config or METNorwayConfig()
         self.cache = cache
-        logger.info(
-            "🌍 METNorwayLocationForecastSyncAdapter initialized (GLOBAL)"
-        )
+        logger.info("🌍 METNorwaySyncAdapter initialized (GLOBAL)")
 
     def get_daily_data_sync(
         self,
@@ -78,7 +77,7 @@ class METNorwayLocationForecastSyncAdapter:
         a região Nordic onde tem alta qualidade com radar.
         """
         logger.debug(
-            f"🌍 MET Norway Locationforecast Sync request (GLOBAL): "
+            f"🌍 MET Norway Sync request (GLOBAL): "
             f"lat={lat}, lon={lon}, "
             f"dates={start_date.date()} to {end_date.date()}"
         )
@@ -105,9 +104,7 @@ class METNorwayLocationForecastSyncAdapter:
         """
         Método assíncrono interno (GLOBAL com estratégia regional).
         """
-        client = METNorwayLocationForecastClient(
-            config=self.config, cache=self.cache
-        )
+        client = METNorwayClient(config=self.config, cache=self.cache)
 
         try:
             # Validações básicas (sem limitação geográfica!)
@@ -125,7 +122,7 @@ class METNorwayLocationForecastSyncAdapter:
             )
 
             logger.info(
-                f"📡 Consultando MET Norway Locationforecast API: "
+                f"📡 Consultando MET Norway API: "
                 f"({lat}, {lon}) - {region_label}"
             )
 
@@ -142,22 +139,18 @@ class METNorwayLocationForecastSyncAdapter:
             )
 
             if not daily_data:
-                logger.warning(
-                    "⚠️  MET Norway Locationforecast retornou dados vazios"
-                )
+                logger.warning("⚠️  MET Norway retornou dados vazios")
                 return []
 
             logger.info(
-                f"✅ MET Norway Locationforecast: {len(daily_data)} dias "
+                f"✅ MET Norway: {len(daily_data)} dias "
                 f"obtidos (de {start_date.date()} a {end_date.date()})"
             )
 
             return daily_data
 
         except Exception as e:
-            logger.error(
-                f"❌ Erro ao buscar dados MET Norway Locationforecast: {e}"
-            )
+            logger.error(f"❌ Erro ao buscar dados MET Norway: {e}")
             raise
 
         finally:
@@ -179,29 +172,21 @@ class METNorwayLocationForecastSyncAdapter:
         Testa com coordenadas de Brasília (Brasil) para validar
         que é realmente GLOBAL.
         """
-        client = METNorwayLocationForecastClient(
-            config=self.config, cache=self.cache
-        )
+        client = METNorwayClient(config=self.config, cache=self.cache)
 
         try:
             # Teste com Brasília (fora da Europa, prova que é GLOBAL!)
             is_healthy = await client.health_check()
 
             if is_healthy:
-                logger.info(
-                    "🏥 MET Norway Locationforecast health check: ✅ OK (GLOBAL)"
-                )
+                logger.info("🏥 MET Norway health check: ✅ OK (GLOBAL)")
             else:
-                logger.error(
-                    "🏥 MET Norway Locationforecast health check: ❌ FAIL"
-                )
+                logger.error("🏥 MET Norway health check: ❌ FAIL")
 
             return is_healthy
 
         except Exception as e:
-            logger.error(
-                f"🏥 MET Norway Locationforecast health check failed: {e}"
-            )
+            logger.error(f"🏥 MET Norway health check failed: {e}")
             return False
 
         finally:
@@ -215,7 +200,7 @@ class METNorwayLocationForecastSyncAdapter:
             dict: Informações de cobertura com quality tiers
         """
         return {
-            "adapter": "METNorwayLocationForecastSyncAdapter",
+            "adapter": "METNorwaySyncAdapter",
             "coverage": "GLOBAL with regional quality optimization",
             "bbox": {
                 "lon_min": -180,

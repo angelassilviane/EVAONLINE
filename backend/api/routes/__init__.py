@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from .climate_sources import router as climate_sources_router
-from .eto_routes import eto_router
-from .health import router as health_router
+from backend.api.routes.climate_sources import router as climate_sources_router
+from backend.api.routes.eto_routes import eto_router
+from backend.api.routes.health import router as health_router
 
 # ============================================================================
 # API SIMPLIFICADA - 8 endpoints essenciais

@@ -6,10 +6,18 @@ Armazena:
 2. CacheMetadata: Rastreamento de dados em cache por tipo
 """
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+)
 from sqlalchemy.sql import func
 
-from ..connection import Base
+from backend.database.connection import Base
 
 
 class UserSessionCache(Base):
@@ -42,9 +50,14 @@ class UserSessionCache(Base):
         index=True,
         comment="UUID única da sessão (formato: sess_<uuid>)",
     )
-    user_agent = Column(String(500), nullable=True, comment="User-Agent do navegador")
+    user_agent = Column(
+        String(500), nullable=True, comment="User-Agent do navegador"
+    )
     created_at = Column(
-        DateTime, nullable=False, server_default=func.now(), comment="Data/hora de criação"
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        comment="Data/hora de criação",
     )
     last_access = Column(
         DateTime,
@@ -54,7 +67,10 @@ class UserSessionCache(Base):
         comment="Última vez acessada",
     )
     cache_size_mb = Column(
-        Float, nullable=False, default=0.0, comment="Tamanho em MB dos dados em cache"
+        Float,
+        nullable=False,
+        default=0.0,
+        comment="Tamanho em MB dos dados em cache",
     )
 
     def __repr__(self) -> str:
@@ -64,7 +80,11 @@ class UserSessionCache(Base):
             size = getattr(self, "cache_size_mb", 0.0)
             access = getattr(self, "last_access", None)
 
-            session_id = sid[:12] + "..." if sid and len(str(sid)) > 12 else str(sid or "None")
+            session_id = (
+                sid[:12] + "..."
+                if sid and len(str(sid)) > 12
+                else str(sid or "None")
+            )
             cache_size = f"{size:.1f}"
             last_access = access.isoformat() if access else "None"
 
@@ -89,8 +109,12 @@ class UserSessionCache(Base):
             "id": self.id,
             "session_id": self.session_id,
             "user_agent": self.user_agent,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_access": self.last_access.isoformat() if self.last_access else None,
+            "created_at": (
+                self.created_at.isoformat() if self.created_at else None
+            ),
+            "last_access": (
+                self.last_access.isoformat() if self.last_access else None
+            ),
             "cache_size_mb": round(self.cache_size_mb, 2),
         }
 
@@ -130,7 +154,10 @@ class CacheMetadata(Base):
         comment="Referência para sessão do usuário",
     )
     location_id = Column(
-        Integer, nullable=False, index=True, comment="ID da localização (world_locations.id)"
+        Integer,
+        nullable=False,
+        index=True,
+        comment="ID da localização (world_locations.id)",
     )
     data_type = Column(
         String(50),
@@ -146,10 +173,15 @@ class CacheMetadata(Base):
         comment="Quando foi atualizado no cache",
     )
     ttl = Column(
-        Integer, nullable=False, default=3600, comment="Time-to-live em segundos (default 1h)"
+        Integer,
+        nullable=False,
+        default=3600,
+        comment="Time-to-live em segundos (default 1h)",
     )
     data_source = Column(
-        String(100), nullable=True, comment="Fonte: nasa_power, met_norway, nws_usa, data_fusion"
+        String(100),
+        nullable=True,
+        comment="Fonte: nasa_power, met_norway, nws_usa, data_fusion",
     )
 
     def __repr__(self) -> str:
@@ -173,7 +205,9 @@ class CacheMetadata(Base):
             "session_id": self.session_id,
             "location_id": self.location_id,
             "data_type": self.data_type,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
             "ttl": self.ttl,
             "data_source": self.data_source,
         }
@@ -188,7 +222,11 @@ Index(
     postgresql_using="btree",
 )
 
-Index("idx_cache_metadata_expires", CacheMetadata.last_updated, postgresql_using="btree")
+Index(
+    "idx_cache_metadata_expires",
+    CacheMetadata.last_updated,
+    postgresql_using="btree",
+)
 
 
 __all__ = ["UserSessionCache", "CacheMetadata"]

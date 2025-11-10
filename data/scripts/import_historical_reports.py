@@ -1,9 +1,9 @@
 """
-Script para importar dados históricos de reports/cities/*.json
+Script para importar dados históricos de data/historical/cities/*.json
 para as tabelas climate_history.studied_cities e monthly_climate_normals.
 
 Usage:
-    uv run python scripts/import_historical_reports.py
+    uv run python data/scripts/import_historical_reports.py
 """
 
 # Fix encoding para Windows
@@ -19,7 +19,7 @@ from backend.database.connection import get_db_context
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 # Adicionar raiz do projeto ao path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 
@@ -146,7 +146,7 @@ def import_city_report(json_path: Path, cities_db: dict) -> dict:
 
     return {
         "city_name": city_name,
-        "state_province": state,
+        "state": state,
         "country": country,
         "latitude": latitude,
         "longitude": longitude,
@@ -167,7 +167,7 @@ def insert_city(conn, city_data: dict) -> Optional[int]:
     query = text(
         """
         INSERT INTO climate_history.studied_cities
-        (city_name, state_province, country, latitude, longitude,
+        (city_name, state, country, latitude, longitude,
          elevation_m, location, timezone, data_sources, reference_periods)
         VALUES
         (:city, :state, :country, :lat, :lon, :elev,
@@ -175,7 +175,7 @@ def insert_city(conn, city_data: dict) -> Optional[int]:
          :tz, cast(:sources as jsonb), cast(:periods as jsonb))
         ON CONFLICT (city_name, latitude, longitude)
         DO UPDATE SET
-            state_province = EXCLUDED.state_province,
+            state = EXCLUDED.state,
             country = EXCLUDED.country,
             elevation_m = EXCLUDED.elevation_m,
             timezone = EXCLUDED.timezone,
@@ -188,7 +188,7 @@ def insert_city(conn, city_data: dict) -> Optional[int]:
 
     params = {
         "city": city_data["city_name"],
-        "state": city_data["state_province"],
+        "state": city_data["state"],
         "country": city_data["country"],
         "lat": city_data["latitude"],
         "lon": city_data["longitude"],
@@ -259,7 +259,7 @@ def main():
     cities_db = load_cities_database()
 
     # Encontrar todos os JSONs
-    reports_dir = project_root / "reports" / "cities"
+    reports_dir = project_root / "data" / "historical" / "cities"
     json_files = sorted(reports_dir.glob("report_*.json"))
 
     print(f"\n📁 Encontrados {len(json_files)} arquivos JSON")

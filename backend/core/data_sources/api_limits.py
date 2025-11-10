@@ -1,27 +1,45 @@
 """
 Limites de datas e validações para cada fonte de dados climáticos.
 
-Define ranges de datas válidos para cada API e funções de validação.
-Padroniza o início de dados históricos em 01/01/1990 para garantir
-disponibilidade em NASA POWER e Open-Meteo Archive.
+PADRONIZAÇÃO EVA (2025):
+========================
+
+DADOS HISTÓRICOS (type='historical'):
+- Início: 01/01/1990 (todas as APIs)
+- NASA POWER: delay de 2-7 dias para dados atuais
+- Open-Meteo Archive: delay de 2 dias para dados atuais
+- Limite de download: 90 dias por requisição (celery assíncrono)
+
+DADOS ATUAIS/FORECAST (type='forecast'):
+- Open-Meteo Forecast: hoje até hoje+5d
+- MET Norway: hoje até hoje+5d
+- NWS Forecast: hoje até hoje+5d
+- Padrão EVA: 5 dias de forecast
+
+DADOS REALTIME (type='current'):
+- NWS Stations: ontem até hoje (observações em tempo real)
 """
 
 from datetime import date, timedelta
 from typing import Dict, Tuple
 
 # ==============================================================================
-# CONSTANTES GLOBAIS
+# CONSTANTES GLOBAIS - PADRONIZAÇÃO EVA
 # ==============================================================================
 
-# Data padrão de início para dados históricos (padronização)
+# Data padrão de início para dados históricos (TODAS AS APIs)
 HISTORICAL_START_DATE = date(1990, 1, 1)
 
-# Limite de dias para processamento síncrono (tempo real)
-REALTIME_MIN_DAYS = 7
-REALTIME_MAX_DAYS = 30
+# Limites de dias para downloads históricos assíncronos
+HISTORICAL_MIN_DAYS = 1  # Mínimo: 1 dia
+HISTORICAL_MAX_DAYS = 90  # Máximo: 90 dias (3 meses) por requisição
 
-# Limite de dias para processamento assíncrono (histórico)
-HISTORICAL_MAX_DAYS = 90  # 3 meses
+# Limites de dias para dashboard em tempo real (dados atuais)
+REALTIME_MIN_DAYS = 7  # Mínimo: 7 dias para análise estatística
+REALTIME_MAX_DAYS = 30  # Máximo: 30 dias para dashboard tempo real
+
+# Forecast padronizado (todas as APIs de previsão)
+FORECAST_DAYS_LIMIT = 5  # Padronização EVA: 5 dias de forecast
 
 # Threshold para classificação automática de tipo de requisição
 REQUEST_TYPE_THRESHOLD_DAYS = 30  # > 30 dias do passado = histórico
@@ -32,55 +50,102 @@ REQUEST_TYPE_THRESHOLD_DAYS = 30  # > 30 dias do passado = histórico
 # ==============================================================================
 
 API_DATE_LIMITS: Dict[str, Dict] = {
-    # NASA POWER: Dados históricos globais
+    # ==========================================================================
+    # DADOS HISTÓRICOS (type='historical') - PADRONIZAÇÃO EVA
+    # Início: 01/01/1990 para todas as APIs
+    # Download assíncrono via Celery (limite: 90 dias por requisição)
+    # ==========================================================================
     "nasa_power": {
-        "start": date(1981, 1, 1),  # Início real da API
-        "end_offset_days": -2,  # hoje - 2 dias
+        "start": date(1981, 1, 1),  # API real desde 1981
+        # ⚠️ DELAY: hoje - 7 dias (processamento MERRA-2/CERES)
+        "end_offset_days": -7,
         "type": "historical",
+        # NASA POWER - Dados históricos globais (MERRA-2 + CERES)
         "description": "NASA POWER - Dados históricos globais",
         "coverage": "global",
-        "min_padrao": HISTORICAL_START_DATE,  # Nosso padrão: 1990
+        "min_padrao": HISTORICAL_START_DATE,  # ✅ PADRÃO EVA: 1990-01-01
+        "notes": [
+            "Delay de 2-7 dias para dados atuais (processamento MERRA-2)",
+            "Resolução: 0.5° × 0.625° (MERRA-2), 1° × 1° (CERES)",
+            "Community 'ag' obrigatória para dados agroclimáticos",
+            "Radiação solar em MJ/m²/dia (pronta para ETo)",
+        ],
     },
-    # Open-Meteo Archive: Dados históricos desde 1940
     "openmeteo_archive": {
-        "start": date(1940, 1, 1),  # Início real da API
-        "end_offset_days": -5,  # hoje - 5 dias
+        "start": date(1940, 1, 1),  # API real desde 1940
+        # ⚠️ DELAY: hoje - 2 dias (processamento ERA5)
+        "end_offset_days": -2,
         "type": "historical",
+        # Open-Meteo Archive - Dados históricos globais (ERA5-Land)
         "description": "Open-Meteo Archive - Dados históricos globais",
         "coverage": "global",
-        "min_padrao": HISTORICAL_START_DATE,  # Nosso padrão: 1990
+        "min_padrao": HISTORICAL_START_DATE,  # ✅ PADRÃO EVA: 1990-01-01
+        "notes": [
+            "Delay de 2 dias para dados atuais (processamento ERA5)",
+            "Resolução: ~11km (0.1°)",
+            "ETo FAO-56 pré-calculado disponível",
+            "Código aberto: github.com/open-meteo/open-meteo",
+        ],
     },
-    # Open-Meteo Forecast: Híbrido (passado recente + forecast)
+    # ==========================================================================
+    # DADOS ATUAIS/FORECAST (type='forecast') - PADRONIZAÇÃO EVA
+    # Período: hoje até hoje+5 dias (TODAS AS APIs)
+    # ==========================================================================
     "openmeteo_forecast": {
-        "start_offset_days": -30,  # hoje - 30 dias
-        "end_offset_days": 16,  # hoje + 16 dias
-        "type": "hybrid",
-        "description": "Open-Meteo Forecast - Híbrido global",
+        "start_offset_days": 0,  # ✅ hoje (modo forecast puro)
+        "end_offset_days": FORECAST_DAYS_LIMIT,  # ✅ hoje + 5 dias (PADRÃO EVA)
+        "type": "forecast",
+        "description": "Open-Meteo Forecast - Previsão global (5 dias)",
         "coverage": "global",
+        "notes": [
+            "Padronizado para 5 dias (API suporta até +16d)",
+            "Resolução: ~11km (0.1°)",
+            "ETo FAO-56 pré-calculado disponível",
+            "Atualização: horária",
+        ],
     },
-    # MET Norway: Forecast para região nórdica
     "met_norway": {
-        "start_offset_days": 0,  # hoje
-        "end_offset_days": 5,  # hoje + 5 dias
+        "start_offset_days": 0,  # ✅ hoje
+        "end_offset_days": FORECAST_DAYS_LIMIT,  # ✅ hoje + 5 dias (PADRÃO EVA)
         "type": "forecast",
-        "description": "MET Norway - Forecast nórdico alta qualidade",
+        "description": "MET Norway - Forecast nórdico alta qualidade (5 dias)",
         "coverage": "nordic",  # Noruega, Suécia, Finlândia, Dinamarca
+        "notes": [
+            "User-Agent obrigatório",
+            "Cache via header 'Expires'",
+            "Rate limit: <20 req/s",
+            "Dados horários agregados para diários",
+        ],
     },
-    # NWS Forecast: Previsão para USA
     "nws_forecast": {
-        "start_offset_days": 0,  # hoje
-        "end_offset_days": 7,  # hoje + 7 dias
+        "start_offset_days": 0,  # ✅ hoje
+        "end_offset_days": FORECAST_DAYS_LIMIT,  # ✅ hoje + 5 dias (PADRÃO EVA)
         "type": "forecast",
-        "description": "NWS Forecast - Previsão USA",
+        "description": "NWS Forecast - Previsão USA (5 dias)",
         "coverage": "usa",
+        "notes": [
+            "Padronizado para 5 dias (API fornece até 7d)",
+            "Cobertura: USA Continental + territórios",
+            "User-Agent obrigatório",
+            "Rate limit: ~5 req/s",
+        ],
     },
-    # NWS Stations: Observações em tempo real USA
+    # ==========================================================================
+    # DADOS REALTIME (type='current') - Observações em tempo real
+    # Período: ontem até hoje
+    # ==========================================================================
     "nws_stations": {
-        "start_offset_days": -1,  # hoje - 1 dia
-        "end_offset_days": 0,  # hoje
+        "start_offset_days": -1,  # ✅ ontem
+        "end_offset_days": 0,  # ✅ hoje
         "type": "current",
-        "description": "NWS Stations - Real-time USA",
+        "description": "NWS Stations - Observações em tempo real USA",
         "coverage": "usa",
+        "notes": [
+            "Dados de estações meteorológicas (MADIS)",
+            "Atraso: até 20 minutos",
+            "Cobertura: USA Continental + territórios",
+            "Precipitação <10mm pode ser arredondada para zero",
+        ],
     },
 }
 

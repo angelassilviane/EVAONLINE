@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Union
 import pandas as pd
 from loguru import logger
 
-from backend.api.services.openmeteo_forecast_client import (
+from backend.api.services.openmeteo_forecast.openmeteo_forecast_client import (
     OpenMeteoForecastClient,
 )
 

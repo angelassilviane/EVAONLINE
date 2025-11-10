@@ -1,5 +1,5 @@
 """
-Script COMPLETO para importar TODOS os dados históricos do diretório reports/.
+Script COMPLETO para importar TODOS os dados históricos do diretório data/historical/.
 
 Importa:
 1. Todas as 27 cidades (com coordenadas dos CSVs)
@@ -8,7 +8,7 @@ Importa:
 4. Análise de extremos
 
 Usage:
-    uv run python scripts/import_all_historical_data.py
+    uv run python data/scripts/import_all_historical_data.py
 """
 
 import csv
@@ -24,7 +24,7 @@ from sqlalchemy import text
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 # Adicionar raiz do projeto ao path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from backend.database.connection import get_db_context
@@ -215,17 +215,15 @@ def insert_or_update_city(
     query = text(
         """
         INSERT INTO climate_history.studied_cities
-        (city_name, state_province, country, latitude, longitude,
-         elevation_m, location, timezone, data_sources, reference_periods)
+        (city_name, state, country, latitude, longitude, elevation, location)
         VALUES
         (:city, :state, :country, :lat, :lon, :elev,
-         ST_SetSRID(ST_MakePoint(:lon2, :lat2), 4326),
-         :tz, cast(:sources as jsonb), cast(:periods as jsonb))
+         ST_SetSRID(ST_MakePoint(:lon2, :lat2), 4326))
         ON CONFLICT (city_name, latitude, longitude)
         DO UPDATE SET
-            state_province = EXCLUDED.state_province,
+            state = EXCLUDED.state,
             country = EXCLUDED.country,
-            elevation_m = EXCLUDED.elevation_m
+            elevation = EXCLUDED.elevation
         RETURNING id
     """
     )
@@ -342,14 +340,11 @@ def main():
     print("=" * 80)
 
     # Caminhos dos arquivos
-    summary_path = project_root / "reports" / "summary" / "cities_summary.csv"
-    extremes_path = (
-        project_root / "reports" / "summary" / "extremes_analysis.csv"
-    )  # noqa: E501
-    annual_path = (
-        project_root / "reports" / "summary" / "annual_normals_comparison.csv"
-    )  # noqa: E501
-    reports_dir = project_root / "reports" / "cities"
+    base_path = project_root / "data" / "historical"
+    summary_path = base_path / "summary" / "cities_summary.csv"
+    extremes_path = base_path / "summary" / "extremes_analysis.csv"
+    annual_path = base_path / "summary" / "annual_normals_comparison.csv"
+    reports_dir = base_path / "cities"
 
     # Carregar dados dos CSVs
     print("\n📂 Carregando CSVs...")

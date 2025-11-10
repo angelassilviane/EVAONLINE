@@ -537,6 +537,14 @@ class NWSForecastClient:
 
             hours = daily_groups[date_key]
 
+            # Skip dias incompletos (< 20 horas) para evitar viés
+            if len(hours) < 20:
+                logger.warning(
+                    f"⚠️  Descartando {date_key}: apenas {len(hours)} horas "
+                    f"(dias parciais causam viés nas estatísticas)"
+                )
+                continue
+
             temps = [
                 h.temp_celsius for h in hours if h.temp_celsius is not None
             ]

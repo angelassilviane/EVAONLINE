@@ -1,11 +1,16 @@
 """
 Serviço de validação centralizado para dados climáticos.
-Consolidação de validações espalhadas em climate_sources_routes e eto_routes.
 
-Benefício: DRY - validações em um único lugar, reutilizáveis.
+Responsabilidades:
+1. Valida coordenadas (-90 a 90, -180 a 180)
+2. Valida formato de datas (YYYY-MM-DD)
+3. Valida período (7-30 dias) para dashboard online em tempo real
+4. Valida período (7-90 dias) para requisições históricas enviadas por e-mail
+5. Valida variáveis climáticas
+6. Valida nome de fonte (string)
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from loguru import logger
@@ -17,6 +22,10 @@ class ClimateValidationService:
     # Constantes de validação
     LAT_MIN, LAT_MAX = -90.0, 90.0
     LON_MIN, LON_MAX = -180.0, 180.0
+
+    # Limites de período da aplicação EVA
+    MIN_PERIOD_DAYS = 7  # Mínimo de 7 dias (todas as operações)
+    MAX_PERIOD_DAYS = 30  # Máximo de 30 dias (interface web)
 
     # Variáveis válidas (padronizadas para todas as APIs)
     VALID_CLIMATE_VARIABLES = {
@@ -33,7 +42,7 @@ class ClimateValidationService:
         # Vento (IMPORTANTE: todas as APIs fornecem a 2m após conversão)
         "wind_speed_2m",
         "wind_speed_2m_mean",
-        "wind_speed_2m_ms",  # NWS formato
+        "wind_speed_2m_ms",
         # Precipitação
         "precipitation",
         "precipitation_sum",
@@ -49,15 +58,20 @@ class ClimateValidationService:
 
     # Fontes válidas (todas as 6 APIs implementadas)
     VALID_SOURCES = {
-        # Global
-        "openmeteo_archive",  # Histórico (1940 → Today-2d)
-        "openmeteo_forecast",  # Previsão (Today-30d → Today+5d)
-        "nasa_power",  # Histórico (1981 → Today-2/7d)
-        "met_norway",  # Previsão global (Today → Today+5d)
-        # USA Continental
-        "nws_forecast",  # Previsão (Today → Today+5d)
-        "nws_stations",  # Observações (Today-1d → Now)
+        # Global - Dados Históricos
+        "openmeteo_archive",  # Histórico (1990-01-01 → hoje-2d)
+        "nasa_power",  # Histórico (1990-01-01 → hoje-2d)
+        # Global - Previsão/Recent
+        "openmeteo_forecast",  # Recent+Forecast (hoje-30d → hoje+5d)
+        "met_norway",  # Previsão (hoje → hoje+5d)
+        # USA Continental - Previsão
+        "nws_forecast",  # Previsão (hoje → hoje+5d)
+        "nws_stations",  # Observações tempo real (hoje-1d → agora)
     }
+
+    # NOTA: Limites temporais detalhados (start_date, end_date_offset)
+    # estão em climate_source_availability.py (fonte única da verdade)
+    # Este módulo apenas valida FORMATO e PERÍODO (7-30 dias)
 
     @staticmethod
     def validate_coordinates(
@@ -138,19 +152,36 @@ class ClimateValidationService:
             if end > today:
                 errors.append(f"End date {end} is in the future")
 
-        # Verificar span máximo (5 anos)
-        max_span = timedelta(days=365 * 5)
-        if end - start > max_span:
+        # Verificar período EVAonline: mínimo 7 dias, máximo 30 dias
+        period_days = (end - start).days + 1  # +1 para incluir ambos os dias
+        min_days = ClimateValidationService.MIN_PERIOD_DAYS
+        max_days = ClimateValidationService.MAX_PERIOD_DAYS
+
+        if period_days < min_days:
             errors.append(
-                f"Date range too long (max 5 years, got {end - start})"
+                f"Period too short: {period_days} days "
+                f"(minimum {min_days} days required)"
+            )
+
+        if period_days > max_days:
+            errors.append(
+                f"Period too long: {period_days} days "
+                f"(maximum {max_days} days allowed)"
             )
 
         if errors:
             logger.warning(f"Date range validation failed: {errors}")
             return False, {"errors": errors}
 
-        logger.debug(f"Date range validated: {start} to {end}")
-        return True, {"start": start, "end": end, "valid": True}
+        logger.debug(
+            f"Date range validated: {start} to {end} ({period_days} days)"
+        )
+        return True, {
+            "start": start,
+            "end": end,
+            "period_days": period_days,
+            "valid": True,
+        }
 
     @staticmethod
     def validate_variables(variables: list) -> tuple[bool, dict[str, Any]]:

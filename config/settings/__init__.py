@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sistema de Configuracoes Moderno - EVAonline
 
 Arquitetura modular com Pydantic Settings para maxima

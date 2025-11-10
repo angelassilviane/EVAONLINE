@@ -20,7 +20,11 @@ warnings.filterwarnings("ignore")
 class ClimateHistoryLoader:
     """Carregador de dados históricos climáticos"""
 
-    def __init__(self, db_session: Session, reports_dir: str = "reports/cities"):
+    def __init__(
+        self,
+        db_session: Session,
+        reports_dir: str = "data/historical/cities",
+    ):
         self.db_session = db_session
         self.reports_dir = Path(reports_dir)
         logger.info(f"ClimateHistoryLoader initialized with {reports_dir}")
@@ -50,7 +54,9 @@ class ClimateHistoryLoader:
             logger.error(f"Error loading JSON {json_path}: {e}")
             return None
 
-    def parse_city_info(self, json_data: dict) -> tuple[str, str, str, float, float, float | None]:
+    def parse_city_info(
+        self, json_data: dict
+    ) -> tuple[str, str, str, float, float, float | None]:
         """
         Extrai informações básicas da cidade
 
@@ -79,7 +85,14 @@ class ClimateHistoryLoader:
             logger.warning(f"Missing coordinates for {city_full}")
             return city_name, country, state_province, 0.0, 0.0, None
 
-        return city_name, country, state_province, latitude, longitude, elevation
+        return (
+            city_name,
+            country,
+            state_province,
+            latitude,
+            longitude,
+            elevation,
+        )
 
     def insert_studied_city(
         self,
@@ -91,7 +104,9 @@ class ClimateHistoryLoader:
         Returns: city_id se sucesso, None se falha
         """
         try:
-            city_name, country, state, lat, lon, elevation = self.parse_city_info(json_data)
+            city_name, country, state, lat, lon, elevation = (
+                self.parse_city_info(json_data)
+            )
 
             # Verificar se já existe
             existing = self.db_session.execute(
@@ -192,16 +207,26 @@ class ClimateHistoryLoader:
                             "eto_abs_min": month_data.get("abs_min"),
                             "eto_abs_max": month_data.get("abs_max"),
                             "precip_normal": month_data.get("precip_normal"),
-                            "precip_daily_mean": month_data.get("precip_daily_mean"),
-                            "precip_daily_median": month_data.get("precip_daily_median"),
-                            "precip_daily_std": month_data.get("precip_daily_std"),
+                            "precip_daily_mean": month_data.get(
+                                "precip_daily_mean"
+                            ),
+                            "precip_daily_median": month_data.get(
+                                "precip_daily_median"
+                            ),
+                            "precip_daily_std": month_data.get(
+                                "precip_daily_std"
+                            ),
                             "precip_p95": month_data.get("precip_p95"),
                             "precip_p99": month_data.get("precip_p99"),
                             "precip_max": month_data.get("precip_max"),
                             "rain_days": month_data.get("rain_days"),
                             "dry_days": month_data.get("dry_days"),
-                            "rain_probability": month_data.get("rain_probability"),
-                            "precip_intensity": month_data.get("precip_intensity"),
+                            "rain_probability": month_data.get(
+                                "rain_probability"
+                            ),
+                            "precip_intensity": month_data.get(
+                                "precip_intensity"
+                            ),
                             "n_days": month_data.get("n_days"),
                         }
 
@@ -216,7 +241,11 @@ class ClimateHistoryLoader:
                         )
                         existing = self.db_session.execute(
                             check_query,
-                            {"city_id": city_id, "period_key": period_key, "month": month},
+                            {
+                                "city_id": city_id,
+                                "period_key": period_key,
+                                "month": month,
+                            },
                         ).first()
 
                         if not existing:
@@ -238,16 +267,22 @@ class ClimateHistoryLoader:
                             insert_data["created_at"] = text("now()")
                             insert_data["updated_at"] = text("now()")
 
-                            insert_stmt = monthly_normals.insert().values(**insert_data)
+                            insert_stmt = monthly_normals.insert().values(
+                                **insert_data
+                            )
                             self.db_session.execute(insert_stmt)
                             inserted_count += 1
 
                     except Exception as e:
-                        logger.warning(f"Error processing month {month_str}: {e}")
+                        logger.warning(
+                            f"Error processing month {month_str}: {e}"
+                        )
                         continue
 
             self.db_session.commit()
-            logger.info(f"Inserted {inserted_count} monthly normals for city {city_id}")
+            logger.info(
+                f"Inserted {inserted_count} monthly normals for city {city_id}"
+            )
             return inserted_count
 
         except Exception as e:

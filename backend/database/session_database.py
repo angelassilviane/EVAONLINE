@@ -3,7 +3,12 @@ Módulo de serviços de banco de dados para API.
 Re-exporta funcionalidades do módulo database principal.
 """
 
-from .connection import Base, SessionLocal, engine, get_db_context
+from backend.database.connection import (
+    Base,
+    SessionLocal,
+    engine,
+    get_db_context,
+)
 
 
 def get_db():

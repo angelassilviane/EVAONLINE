@@ -6,10 +6,18 @@ Armazena:
 2. FavoriteLocation: Localização individual no favorito
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.sql import func
 
-from ..connection import Base
+from backend.database.connection import Base
 
 
 class UserFavorites(Base):
@@ -52,7 +60,10 @@ class UserFavorites(Base):
         comment="ID de usuário autenticado (mutualmente exclusivo com session_id)",
     )
     created_at = Column(
-        DateTime, nullable=False, server_default=func.now(), comment="Data/hora de criação"
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        comment="Data/hora de criação",
     )
     updated_at = Column(
         DateTime,
@@ -69,10 +80,14 @@ class UserFavorites(Base):
             uid = getattr(self, "user_id", None)
             updated = getattr(self, "updated_at", None)
 
-            identifier = f"session='{sid[:12]}...'" if sid else f"user_id={uid}"
+            identifier = (
+                f"session='{sid[:12]}...'" if sid else f"user_id={uid}"
+            )
             updated_str = updated.isoformat() if updated else "None"
 
-            return f"<UserFavorites(" f"{identifier}, " f"updated={updated_str})>"
+            return (
+                f"<UserFavorites(" f"{identifier}, " f"updated={updated_str})>"
+            )
         except Exception:
             return "<UserFavorites(uninitialized)>"
 
@@ -87,8 +102,12 @@ class UserFavorites(Base):
             "id": self.id,
             "session_id": self.session_id,
             "user_id": self.user_id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": (
+                self.created_at.isoformat() if self.created_at else None
+            ),
+            "updated_at": (
+                self.updated_at.isoformat() if self.updated_at else None
+            ),
         }
 
 
@@ -127,7 +146,10 @@ class FavoriteLocation(Base):
         comment="Referência para coleção de favoritos",
     )
     location_id = Column(
-        Integer, nullable=False, index=True, comment="ID da localização (world_locations.id)"
+        Integer,
+        nullable=False,
+        index=True,
+        comment="ID da localização (world_locations.id)",
     )
     added_at = Column(
         DateTime,
@@ -135,7 +157,11 @@ class FavoriteLocation(Base):
         server_default=func.now(),
         comment="Data/hora em que foi adicionado aos favoritos",
     )
-    notes = Column(Text, nullable=True, comment="Anotações opcionais do usuário (max 500 chars)")
+    notes = Column(
+        Text,
+        nullable=True,
+        comment="Anotações opcionais do usuário (max 500 chars)",
+    )
 
     def __repr__(self) -> str:
         try:
@@ -145,7 +171,11 @@ class FavoriteLocation(Base):
 
             added_str = added.isoformat() if added else "None"
 
-            return f"<FavoriteLocation(" f"location_id={loc_id}, " f"added={added_str})>"
+            return (
+                f"<FavoriteLocation("
+                f"location_id={loc_id}, "
+                f"added={added_str})>"
+            )
         except Exception:
             return "<FavoriteLocation(uninitialized)>"
 
@@ -174,7 +204,11 @@ Index(
     postgresql_using="btree",
 )
 
-Index("idx_favorite_location_popular", FavoriteLocation.location_id, postgresql_using="btree")
+Index(
+    "idx_favorite_location_popular",
+    FavoriteLocation.location_id,
+    postgresql_using="btree",
+)
 
 
 __all__ = ["UserFavorites", "FavoriteLocation"]
