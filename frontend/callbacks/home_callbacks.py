@@ -647,3 +647,119 @@ def create_selection_info_card(location_data):
     )
 
     return card
+
+
+# ========== CALLBACKS PARA CONTROLE CUSTOMIZADO DE CAMADAS ==========
+
+
+def register_layer_control_callbacks(app):
+    """Registra callbacks para o controle customizado de camadas."""
+    from dash import callback_context
+
+    # ✅ Importar apenas as funções que retornam listas de markers/componentes
+    from ..components.world_map_leaflet import (
+        load_brasil_geojson,
+        load_matopiba_geojson,
+        load_matopiba_cities_markers,
+        load_piracicaba_marker,
+    )
+
+    # ✅ NOVO: Callback para controlar painel collapsible
+    @app.callback(
+        Output("layer-control-panel", "style"),
+        [
+            Input("layer-control-toggle", "n_clicks"),
+            Input("layer-control-close", "n_clicks"),
+        ],
+        [State("layer-control-panel", "style")],
+        prevent_initial_call=True,
+    )
+    def toggle_layer_panel(toggle_clicks, close_clicks, current_style):
+        """Controla a visibilidade do painel de camadas collapsible."""
+        ctx = callback_context
+
+        if not ctx.triggered:
+            return current_style
+
+        # Identifica qual botão foi clicado
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if trigger_id == "layer-control-toggle":
+            # Botão Toggle - alterna entre mostrar/ocultar
+            if current_style.get("display") == "none":
+                logger.info("🗺️ Painel de camadas ABERTO")
+                return {**current_style, "display": "block"}
+            else:
+                logger.info("🗺️ Painel de camadas FECHADO (toggle)")
+                return {**current_style, "display": "none"}
+
+        elif trigger_id == "layer-control-close":
+            # Botão Fechar - sempre oculta
+            logger.info("🗺️ Painel de camadas FECHADO (close)")
+            return {**current_style, "display": "none"}
+
+        return current_style
+
+    @app.callback(
+        Output("brasil-feature-group", "children"),
+        Input("layer-brasil-toggle", "value"),
+        prevent_initial_call=False,
+    )
+    def toggle_brasil_layer(selected):
+        """Controla visibilidade da camada Brasil."""
+        if selected and "brasil" in selected:
+            brasil_geojson = load_brasil_geojson()
+            # ✅ Retornar em lista para o FeatureGroup aceitar
+            if brasil_geojson is not None:
+                print(f"✅ Brasil GeoJSON carregado: {type(brasil_geojson)}")
+                return [brasil_geojson]
+            else:
+                print("❌ Brasil GeoJSON retornou None")
+                return []
+        return []
+
+    @app.callback(
+        Output("matopiba-feature-group", "children"),
+        Input("layer-matopiba-toggle", "value"),
+        prevent_initial_call=False,
+    )
+    def toggle_matopiba_layer(selected):
+        """Controla visibilidade da camada MATOPIBA."""
+        if selected and "matopiba" in selected:
+            matopiba_geojson = load_matopiba_geojson()
+            # ✅ Retornar em lista para o FeatureGroup aceitar
+            if matopiba_geojson is not None:
+                print(
+                    f"✅ MATOPIBA GeoJSON carregado: {type(matopiba_geojson)}"
+                )
+                return [matopiba_geojson]
+            else:
+                print("❌ MATOPIBA GeoJSON retornou None")
+                return []
+        return []
+
+    @app.callback(
+        Output("cities-feature-group", "children"),
+        Input("layer-cities-toggle", "value"),
+        prevent_initial_call=False,
+    )
+    def toggle_cities_layer(selected):
+        """Controla visibilidade da camada de cidades."""
+        if selected and "cities" in selected:
+            cities_markers = load_matopiba_cities_markers()
+            return cities_markers if cities_markers else []
+        return []
+
+    @app.callback(
+        Output("piracicaba-feature-group", "children"),
+        Input("layer-piracicaba-toggle", "value"),
+        prevent_initial_call=False,
+    )
+    def toggle_piracicaba_layer(selected):
+        """Controla visibilidade da camada Piracicaba."""
+        if selected and "piracicaba" in selected:
+            piracicaba_marker = load_piracicaba_marker()
+            return [piracicaba_marker] if piracicaba_marker else []
+        return []
+
+    logger.info("✅ Callbacks de controle de camadas registrados")

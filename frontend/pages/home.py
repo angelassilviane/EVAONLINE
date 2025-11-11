@@ -86,7 +86,7 @@ home_layout = html.Div(
                                         dbc.CardBody(
                                             [
                                                 create_world_map(),
-                                                # Exibir coordenadas selecionadas (compacto)
+                                                # Exibir coordenadas selecionadas
                                                 html.Div(
                                                     id="current-selection-info",
                                                     className="mt-2",

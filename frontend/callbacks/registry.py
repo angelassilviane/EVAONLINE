@@ -11,9 +11,13 @@ def register_all_callbacks(app):
     """Registra todos callbacks ativos."""
     try:
         # ✅ Callback principal da home (mapa leaflet + coordenadas)
-        from .home_callbacks import register_home_callbacks
+        from .home_callbacks import (
+            register_home_callbacks,
+            register_layer_control_callbacks,
+        )
 
         register_home_callbacks(app)
+        register_layer_control_callbacks(app)  # ✅ NOVO: Controle de camadas
 
         # ✅ Callbacks de navegação (rotas)
         from .navigation_callbacks import register_navigation_callbacks

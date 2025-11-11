@@ -55,8 +55,23 @@ class FooterManager:
             "esalq": "https://www.esalq.usp.br/",
             "usp": "https://www.usp.br/",
             "fapesp": "https://fapesp.br/",
-            # Adicione mais: "ibm": "https://www.ibm.com/br-pt",
+            "ibm": "https://www.ibm.com/br-pt",
+            "c4ai": "https://c4ai.inova.usp.br/",
+            "leb": "http://www.leb.esalq.usp.br/",
         }
+
+    @lru_cache(maxsize=1)
+    def get_logo_extensions(self) -> Dict[str, str]:
+        """Extensões dos arquivos de logo (padrão: .png)."""
+        return {
+            "leb": ".jpg",  # LEB usa .jpg
+            # Todos os outros usam .png por padrão
+        }
+
+    def get_logo_path(self, partner: str) -> str:
+        """Retorna o caminho completo do logo com a extensão correta."""
+        extension = self.get_logo_extensions().get(partner, ".png")
+        return f"/assets/images/logo_{partner}{extension}"
 
     def get_email_link(self, email: str) -> str:
         """Link mailto simples."""
@@ -166,24 +181,39 @@ def create_footer(lang: str = "pt") -> html.Footer:
                                         [
                                             html.A(
                                                 html.Img(
-                                                    src=f"/assets/images/logo_{partner}.png",
+                                                    src=footer_manager.get_logo_path(
+                                                        partner
+                                                    ),
                                                     alt=f"Logo {partner.upper()}",
                                                     style={
-                                                        "height": "40px",
-                                                        "margin": "5px auto",
+                                                        "height": "50px",
+                                                        "maxWidth": "120px",
+                                                        "margin": "8px auto",
                                                         "display": "block",
-                                                        "opacity": "0.8",
-                                                        "transition": "opacity 0.3s",
+                                                        "padding": "8px",
+                                                        "background": "white",
+                                                        "borderRadius": "8px",
+                                                        "opacity": "0.9",
+                                                        "transition": "all 0.3s",
+                                                        "objectFit": "contain",
                                                     },
+                                                    className="logo-partner",
                                                 ),
                                                 href=url,
                                                 target="_blank",
                                                 rel="noopener noreferrer",
                                                 title=f"Visitar {partner.upper()}",
+                                                style={
+                                                    "textDecoration": "none",
+                                                },
                                             )
                                             for partner, url in footer_manager.get_partner_data().items()
                                         ],
-                                        className="d-flex justify-content-center flex-column align-items-center",
+                                        className="d-flex justify-content-center flex-wrap align-items-center gap-2",
+                                        style={
+                                            "maxWidth": "400px",
+                                            "margin": "0 auto",
+                                        },
                                     ),
                                 ],
                                 md=4,

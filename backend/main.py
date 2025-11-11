@@ -53,7 +53,9 @@ def create_application() -> FastAPI:
 
     assets_dir = Path("assets")
     if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+        app.mount(
+            "/frontend/assets", StaticFiles(directory="assets"), name="assets"
+        )
 
     # Add root endpoint
     @app.get("/")

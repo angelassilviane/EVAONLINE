@@ -17,23 +17,21 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path when running directly
-if __name__ == "__main__":
-    project_root = Path(__file__).parent.parent
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Import after path setup
-try:
-    from .core.dash_app_config import create_dash_app
-    from .core.base_layout import create_base_layout
-    from .callbacks.registry import register_all_callbacks
-    from .utils.logging_config import setup_logging
-except ImportError:
-    # Fallback for direct execution
-    from core.dash_app_config import create_dash_app
-    from core.base_layout import create_base_layout
-    from callbacks.registry import register_all_callbacks
-    from utils.logging_config import setup_logging
+# Add frontend to path for imports
+frontend_path = Path(__file__).parent
+if str(frontend_path) not in sys.path:
+    sys.path.insert(0, str(frontend_path))
+
+# Import components (always use absolute imports now)
+from frontend.core.dash_app_config import create_dash_app
+from frontend.core.base_layout import create_base_layout
+from frontend.callbacks.registry import register_all_callbacks
+from frontend.utils.logging_config import setup_logging
 
 # Setup logging
 setup_logging()
