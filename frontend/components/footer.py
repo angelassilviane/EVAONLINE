@@ -1,6 +1,7 @@
 """
-Componente de footer (rodapé) para o ETO Calculator - Versão com Colunas.
-Colunas: Desenvolvedores | Logos Parceiros | Links Importantes.
+Componente de footer (rodapé) profissional para o ETO Calculator - Versão com 4 Colunas.
+Colunas: Logo | Desenvolvedores | Parceiros | Links Importantes.
+Inspirado em footers acadêmicos clean e responsivos.
 """
 
 import logging
@@ -29,22 +30,19 @@ class FooterManager:
         """Desenvolvedores com emails."""
         return [
             {
-                "name": "Angela Cristina Cunha Soares",
-                "email": "angelacunhasoares@usp.br",
+                "name": "Angela S. M. C. Soares",
+                "email": "angelasilviane@alumni.usp.br",
                 "institution": "ESALQ/USP",
-                "role": "Desenvolvedora Principal",
             },
             {
                 "name": "Patricia A. A. Marques",
                 "email": "paamarques@usp.br",
                 "institution": "ESALQ/USP",
-                "role": "Pesquisadora",
             },
             {
                 "name": "Carlos D. Maciel",
                 "email": "carlos.maciel@unesp.br",
                 "institution": "UNESP",
-                "role": "Coordenador",
             },
         ]
 
@@ -62,15 +60,19 @@ class FooterManager:
 
     @lru_cache(maxsize=1)
     def get_logo_extensions(self) -> Dict[str, str]:
-        """Extensões dos arquivos de logo (padrão: .png)."""
+        """Extensões dos arquivos de logo (padrão: .svg)."""
         return {
-            "leb": ".jpg",  # LEB usa .jpg
-            # Todos os outros usam .png por padrão
+            # Todos os logos agora são SVG
+            "esalq": ".svg",
+            "usp": ".svg",
+            "fapesp": ".svg",
+            "ibm": ".svg",
+            "leb": ".svg",
         }
 
     def get_logo_path(self, partner: str) -> str:
         """Retorna o caminho completo do logo com a extensão correta."""
-        extension = self.get_logo_extensions().get(partner, ".png")
+        extension = self.get_logo_extensions().get(partner, ".svg")
         return f"/assets/images/logo_{partner}{extension}"
 
     def get_email_link(self, email: str) -> str:
@@ -84,220 +86,298 @@ footer_manager = FooterManager()
 
 def create_footer(lang: str = "pt") -> html.Footer:
     """
-    Cria footer com 3 colunas responsivas.
+    Cria footer profissional com 4 colunas responsivas.
     Args:
         lang: 'pt' ou 'en'.
     Returns:
-        html.Footer: Footer columnar.
+        html.Footer: Footer columnar profissional.
     """
-    logger.debug("🔄 Criando footer com colunas")
+    logger.debug("🔄 Criando footer profissional com 3 colunas")
     try:
         texts = _get_footer_texts(lang)
 
         return html.Footer(
-            dbc.Container(
-                [
-                    # Linha principal: Sobre + Tecnologias (seu atual, adaptado)
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.H5(
-                                        "ETO Calculator",
-                                        className="fw-bold mb-3 text-white",
-                                    ),
-                                    html.P(
-                                        "Cálculo de ETo com dados climáticos e mapa interativo.",
-                                        className="text-white-50 small",
-                                    ),
-                                ],
-                                md=6,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.H5(
-                                        "Tecnologias",
-                                        className="fw-bold mb-3 text-white",
-                                    ),
-                                    html.P(
-                                        "Dash • Plotly • FastAPI • Python • Bootstrap",
-                                        className="text-white-50 small",
-                                    ),
-                                ],
-                                md=6,
-                            ),
-                        ],
-                        className="py-3",
-                    ),
-                    # Nova Linha: 3 Colunas Principais
-                    dbc.Row(
-                        [
-                            # Coluna 1: Desenvolvedores
-                            dbc.Col(
-                                [
-                                    html.H6(
-                                        texts["developers"],
-                                        className="mb-3 text-white-50",
-                                    ),
-                                    html.Ul(
-                                        [
-                                            html.Li(
-                                                [
-                                                    html.Strong(dev["name"]),
-                                                    html.Br(),
-                                                    html.Small(
-                                                        dev["institution"]
-                                                        + " • "
-                                                        + dev["role"],
-                                                        className="text-white-50",
-                                                    ),
-                                                    html.Br(),
-                                                    html.A(
-                                                        dev["email"],
-                                                        href=footer_manager.get_email_link(
-                                                            dev["email"]
+            [
+                # Linha divisória sutil acima do footer (estilo C4AI)
+                html.Hr(
+                    className="m-0",
+                    style={
+                        "borderTop": "1px solid #dee2e6",
+                        "opacity": "0.5",
+                    },
+                ),
+                dbc.Container(
+                    [
+                        # ===== Linha Única: 3 Colunas =====
+                        dbc.Row(
+                            [
+                                # Coluna 1: Desenvolvedores
+                                dbc.Col(
+                                    [
+                                        html.H6(
+                                            texts["developers"],
+                                            className="mb-3 fw-bold text-center",
+                                            style={"color": "#2c3e50"},
+                                        ),
+                                        html.Ul(
+                                            [
+                                                html.Li(
+                                                    [
+                                                        html.Strong(
+                                                            dev["name"],
+                                                            className="d-block",
                                                         ),
-                                                        className="text-white-50 small d-block",
-                                                        target="_blank",
+                                                        html.Span(
+                                                            f"{dev['institution']}",
+                                                            className="text-muted small d-block mb-1",
+                                                        ),
+                                                        html.A(
+                                                            dev["email"],
+                                                            href=footer_manager.get_email_link(
+                                                                dev["email"]
+                                                            ),
+                                                            className="text-muted small",
+                                                            style={
+                                                                "textDecoration": "none",
+                                                                "fontSize": "0.875rem",
+                                                            },
+                                                        ),
+                                                    ],
+                                                    className="mb-3 list-unstyled",
+                                                )
+                                                for dev in footer_manager.get_developer_data()
+                                            ],
+                                            className="list-unstyled",
+                                        ),
+                                    ],
+                                    md=4,
+                                    className="mb-4 text-center",
+                                ),
+                                # Coluna 2: Parceiros (logos maiores)
+                                dbc.Col(
+                                    [
+                                        html.H6(
+                                            texts["partners"],
+                                            className="mb-3 fw-bold text-center",
+                                            style={"color": "#2c3e50"},
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.A(
+                                                    html.Img(
+                                                        src=footer_manager.get_logo_path(
+                                                            partner
+                                                        ),
+                                                        alt=f"Logo {partner.upper()}",
+                                                        style={
+                                                            "height": "75px",  # Aumentado de 65px
+                                                            "maxWidth": "160px",  # Aumentado de 140px
+                                                            "margin": "8px",
+                                                            "display": "block",
+                                                            "objectFit": "contain",
+                                                            "opacity": "0.9",
+                                                            "transition": "opacity 0.3s ease",
+                                                        },
+                                                        className="logo-partner",
                                                     ),
-                                                ],
-                                                className="mb-3 small",
-                                            )
-                                            for dev in footer_manager.get_developer_data()
-                                        ],
-                                        className="list-unstyled",
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                            # Coluna 2: Logos Parceiros
-                            dbc.Col(
-                                [
-                                    html.H6(
-                                        texts["partners"],
-                                        className="mb-3 text-white-50 text-center",
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.A(
-                                                html.Img(
-                                                    src=footer_manager.get_logo_path(
-                                                        partner
-                                                    ),
-                                                    alt=f"Logo {partner.upper()}",
+                                                    href=url,
+                                                    target="_blank",
+                                                    rel="noopener noreferrer",
+                                                    title=f"Visitar {partner.upper()}",
                                                     style={
-                                                        "height": "50px",
-                                                        "maxWidth": "120px",
-                                                        "margin": "8px auto",
-                                                        "display": "block",
-                                                        "padding": "8px",
-                                                        "background": "white",
-                                                        "borderRadius": "8px",
-                                                        "opacity": "0.9",
-                                                        "transition": "all 0.3s",
-                                                        "objectFit": "contain",
+                                                        "textDecoration": "none",
+                                                        ":hover .logo-partner": {
+                                                            "opacity": "1.0"
+                                                        },
                                                     },
-                                                    className="logo-partner",
+                                                )
+                                                for partner, url in footer_manager.get_partner_data().items()
+                                            ],
+                                            className="d-flex justify-content-center flex-wrap align-items-center",
+                                        ),
+                                    ],
+                                    md=4,
+                                    className="mb-4 text-center",
+                                ),
+                                # Coluna 3: Links Importantes (horizontal em uma linha)
+                                dbc.Col(
+                                    [
+                                        html.H6(
+                                            texts["links"],
+                                            className="mb-3 fw-bold text-center",
+                                            style={"color": "#2c3e50"},
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.A(
+                                                    [
+                                                        html.Img(
+                                                            src="/assets/images/github.svg",
+                                                            alt="GitHub",
+                                                            style={
+                                                                "height": "40px",
+                                                                "width": "40px",
+                                                                "objectFit": "contain",
+                                                            },
+                                                            className="github-icon",
+                                                        ),
+                                                        html.Span(
+                                                            "GitHub",
+                                                            className="d-block small mt-1",
+                                                            style={
+                                                                "color": "#6c757d"
+                                                            },
+                                                        ),
+                                                    ],
+                                                    href=(
+                                                        "https://github.com/"
+                                                        "angelacunhasoares/"
+                                                        "EVAonline_SoftwareX"
+                                                    ),
+                                                    target="_blank",
+                                                    rel="noopener noreferrer",
+                                                    title="Repositório GitHub",
+                                                    style={
+                                                        "textDecoration": "none",
+                                                        "display": "flex",
+                                                        "flexDirection": "column",
+                                                        "alignItems": "center",
+                                                        "margin": "0 10px",
+                                                    },
                                                 ),
-                                                href=url,
+                                                html.A(
+                                                    [
+                                                        html.I(
+                                                            className=(
+                                                                "bi bi-file-earmark-text"
+                                                            ),
+                                                            style={
+                                                                "fontSize": "40px",
+                                                                "color": "#6c757d",
+                                                            },
+                                                        ),
+                                                        html.Span(
+                                                            "Licença",
+                                                            className="d-block small mt-1",
+                                                            style={
+                                                                "color": "#6c757d"
+                                                            },
+                                                        ),
+                                                    ],
+                                                    href=(
+                                                        "https://github.com/"
+                                                        "angelacunhasoares/"
+                                                        "EVAonline_SoftwareX?"
+                                                        "tab=License-1-ov-file"
+                                                    ),
+                                                    target="_blank",
+                                                    rel="noopener noreferrer",
+                                                    title="Licença MIT",
+                                                    style={
+                                                        "textDecoration": "none",
+                                                        "display": "flex",
+                                                        "flexDirection": "column",
+                                                        "alignItems": "center",
+                                                        "margin": "0 10px",
+                                                    },
+                                                    className="license-link",
+                                                ),
+                                                html.A(
+                                                    [
+                                                        html.I(
+                                                            className=(
+                                                                "bi bi-book"
+                                                            ),
+                                                            style={
+                                                                "fontSize": "40px",
+                                                                "color": "#6c757d",
+                                                            },
+                                                        ),
+                                                        html.Span(
+                                                            "Documentação",
+                                                            className="d-block small mt-1",
+                                                            style={
+                                                                "color": "#6c757d"
+                                                            },
+                                                        ),
+                                                    ],
+                                                    href="/documentation",
+                                                    title="Documentação",
+                                                    style={
+                                                        "textDecoration": "none",
+                                                        "display": "flex",
+                                                        "flexDirection": "column",
+                                                        "alignItems": "center",
+                                                        "margin": "0 10px",
+                                                    },
+                                                    className="docs-link",
+                                                ),
+                                            ],
+                                            className=(
+                                                "d-flex justify-content-center "
+                                                "align-items-center flex-wrap"
+                                            ),
+                                        ),
+                                    ],
+                                    md=4,
+                                    className="mb-4 text-center",
+                                ),
+                            ],
+                            className="py-4 justify-content-center",
+                        ),
+                        # Linha de Copyright
+                        html.Hr(
+                            className="my-2", style={"borderColor": "#dee2e6"}
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    html.P(
+                                        [
+                                            f"Copyright ©{footer_manager.current_year} ",
+                                            html.Strong("EVAonline"),
+                                            ". Open-source sob licença ",
+                                            html.A(
+                                                "AGPLv3",
+                                                href="https://github.com/angelassilviane/EVAONLINE/blob/main/LICENSE",
                                                 target="_blank",
                                                 rel="noopener noreferrer",
-                                                title=f"Visitar {partner.upper()}",
+                                                className="text-muted",
                                                 style={
-                                                    "textDecoration": "none",
+                                                    "textDecoration": "underline"
                                                 },
-                                            )
-                                            for partner, url in footer_manager.get_partner_data().items()
+                                            ),
+                                            ".",
                                         ],
-                                        className="d-flex justify-content-center flex-wrap align-items-center gap-2",
-                                        style={
-                                            "maxWidth": "400px",
-                                            "margin": "0 auto",
-                                        },
+                                        className="text-center mb-0 small text-muted",
                                     ),
-                                ],
-                                md=4,
-                                className="text-center",
-                            ),
-                            # Coluna 3: Links Importantes
-                            dbc.Col(
-                                [
-                                    html.H6(
-                                        texts["links"],
-                                        className="mb-3 text-white-50",
-                                    ),
-                                    html.Ul(
-                                        [
-                                            html.Li(
-                                                html.A(
-                                                    "GitHub Repo",
-                                                    href="https://github.com/angelacunhasoares/EVAonline_SoftwareX",
-                                                    target="_blank",
-                                                    className="text-white-50 d-block small mb-2",
-                                                    rel="noopener noreferrer",
-                                                ),
-                                                className="mb-2",
-                                            ),
-                                            html.Li(
-                                                html.A(
-                                                    "Licença do Software",
-                                                    href="https://github.com/angelacunhasoares/EVAonline_SoftwareX?tab=License-1-ov-file",
-                                                    target="_blank",
-                                                    className="text-white-50 d-block small mb-2",
-                                                    rel="noopener noreferrer",
-                                                ),
-                                                className="mb-2",
-                                            ),
-                                            html.Li(
-                                                html.A(
-                                                    "Documentação",
-                                                    href="/documentation",  # Linka para sua página documentation.py
-                                                    className="text-white-50 d-block small",
-                                                ),
-                                                className="mb-2",
-                                            ),
-                                        ],
-                                        className="list-unstyled",
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                        ],
-                        className="mb-4",
-                    ),
-                    # Linha Copyright (simples, abaixo das colunas)
-                    html.Hr(className="my-2 bg-white-50"),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                html.P(
-                                    [
-                                        f"© {footer_manager.current_year} ETO Calculator. ",
-                                        "Todos os direitos reservados. ",
-                                        "Desenvolvido com ",
-                                        html.I(
-                                            className="bi bi-heart-fill text-danger mx-1"
-                                        ),
-                                        " pela ESALQ/USP.",
-                                    ],
-                                    className="text-center mb-0 small text-white-50",
+                                    width=12,
                                 ),
-                                width=12,
-                            ),
-                        ]
-                    ),
-                ],
-                fluid=True,
-            ),
-            className="bg-dark text-white mt-auto py-3",
-            style={"marginTop": "auto"},
+                            ],
+                            className="mt-2",
+                        ),
+                    ],
+                    fluid=False,  # Usar container fixo
+                    style={
+                        "paddingLeft": "40px",
+                        "paddingRight": "40px",
+                        "maxWidth": "1400px",
+                    },
+                ),
+            ],
+            className="bg-white",
+            style={
+                "marginTop": "10px",  # Margem reduzida
+                "paddingTop": "0px",
+                "paddingBottom": "15px",
+                "overflowX": "hidden",
+            },
         )
     except Exception as e:
         logger.error(f"❌ Erro ao criar footer: {e}")
         return _create_fallback_footer()
 
 
-# Funções Auxiliares (simplificadas)
 def _get_footer_texts(lang: str) -> Dict:
     """Textos i18n."""
     texts = {
@@ -320,15 +400,15 @@ def _create_fallback_footer():
     return html.Footer(
         html.Div(
             html.P(
-                "© 2024 ETO Calculator - Desenvolvido com ❤️ pela ESALQ/USP",
+                "© 2025 ETO Calculator",
                 className="text-center text-muted py-3 mb-0 small",
             ),
-            className="bg-light border-top",
+            className="bg-white border-top",
         )
     )
 
 
-# Footer minimalista (mantido do seu original)
+# Versão minimalista mantida para compatibilidade
 def create_simple_footer(lang: str = "pt") -> html.Footer:
     """Versão minimalista."""
     texts = _get_footer_texts(lang)
@@ -362,6 +442,11 @@ def create_simple_footer(lang: str = "pt") -> html.Footer:
                 className="py-3",
             ),
             fluid=True,
+            style={
+                "paddingLeft": "40px",
+                "paddingRight": "40px",
+                "maxWidth": "100%",
+            },
         ),
-        className="bg-light border-top",
+        className="bg-white border-top",
     )

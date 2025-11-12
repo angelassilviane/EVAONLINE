@@ -19,7 +19,6 @@ home_layout = html.Div(
     [
         dbc.Container(
             [
-                # Row com Mapa e Favoritos lado a lado
                 dbc.Row(
                     [
                         # Coluna do Mapa (8 colunas)
@@ -46,10 +45,35 @@ home_layout = html.Div(
                                                             [
                                                                 html.Span(
                                                                     "2.",
-                                                                    className="fw-bold me-2",
+                                                                    className=(
+                                                                        "fw-bold me-2"
+                                                                    ),
                                                                 ),
-                                                                "Use o botão de localização (📍) para "
-                                                                "encontrar sua posição atual",
+                                                                (
+                                                                    "Use o botão de "
+                                                                    "localização ( "
+                                                                ),
+                                                                html.Img(
+                                                                    src=(
+                                                                        "/assets/images/"
+                                                                        "geo-location.svg"
+                                                                    ),
+                                                                    alt="Localização",
+                                                                    style={
+                                                                        "height": "16px",
+                                                                        "width": "16px",
+                                                                        "display": (
+                                                                            "inline"
+                                                                        ),
+                                                                        "verticalAlign": (
+                                                                            "middle"
+                                                                        ),
+                                                                    },
+                                                                ),
+                                                                (
+                                                                    " ) para encontrar "
+                                                                    "sua posição atual"
+                                                                ),
                                                             ]
                                                         ),
                                                         dbc.ListGroupItem(
@@ -58,7 +82,8 @@ home_layout = html.Div(
                                                                     "3.",
                                                                     className="fw-bold me-2",
                                                                 ),
-                                                                "Clique em 'Adicionar Favorito' no card abaixo do mapa",
+                                                                "Use o controle de camadas (🗺️) para "
+                                                                "visualizar Brasil, MATOPIBA e Cidades",
                                                             ]
                                                         ),
                                                         dbc.ListGroupItem(
@@ -67,7 +92,44 @@ home_layout = html.Div(
                                                                     "4.",
                                                                     className="fw-bold me-2",
                                                                 ),
-                                                                "Use 'Calcular ETo' para processar os dados",
+                                                                "Clique no botão '(⭐ ADICIONAR)' para adicionar aos favoritos",
+                                                            ]
+                                                        ),
+                                                        dbc.ListGroupItem(
+                                                            [
+                                                                html.Span(
+                                                                    "5.",
+                                                                    className=(
+                                                                        "fw-bold me-2"
+                                                                    ),
+                                                                ),
+                                                                (
+                                                                    "Use o botão ("
+                                                                ),
+                                                                html.Img(
+                                                                    src=(
+                                                                        "/assets/images/"
+                                                                        "calculator_eto.svg"
+                                                                    ),
+                                                                    alt="Calculadora",
+                                                                    style={
+                                                                        "height": "16px",
+                                                                        "width": "16px",
+                                                                        "display": (
+                                                                            "inline"
+                                                                        ),
+                                                                        "verticalAlign": (
+                                                                            "middle"
+                                                                        ),
+                                                                    },
+                                                                ),
+                                                                "CALCULAR ET",
+                                                                html.Sub("0"),
+                                                                (
+                                                                    ") para "
+                                                                    "ser redirecionado a "
+                                                                    "página de cálculo",
+                                                                ),
                                                             ]
                                                         ),
                                                     ],
@@ -78,7 +140,10 @@ home_layout = html.Div(
                                         ),
                                     ],
                                     start_collapsed=True,  # Inicia fechado
-                                    className="mb-3",
+                                    style={
+                                        "marginTop": "25px",
+                                        "marginBottom": "10px",
+                                    },
                                 ),
                                 # Card do Mapa
                                 dbc.Card(
@@ -99,7 +164,7 @@ home_layout = html.Div(
                                 ),
                             ],
                             md=8,
-                            className="mb-4",
+                            className="mb-2",  # Reduzido de mb-4 para mb-2
                         ),
                         # Coluna dos Favoritos (4 colunas)
                         dbc.Col(
@@ -212,6 +277,8 @@ home_layout = html.Div(
                                                     ],
                                                     className="mb-2",
                                                 ),
+                                                # Espaçador flex para empurrar botão para baixo
+                                                html.Div(style={"flex": "1"}),
                                                 # Botão Limpar (sempre fixo no final)
                                                 html.Div(
                                                     [
@@ -223,6 +290,9 @@ home_layout = html.Div(
                                                             className="d-flex justify-content-center",
                                                         ),
                                                     ],
+                                                    style={
+                                                        "marginTop": "auto"
+                                                    },
                                                 ),
                                             ],
                                             style={
@@ -235,41 +305,44 @@ home_layout = html.Div(
                                     className="shadow-sm",
                                     style={
                                         "position": "sticky",
-                                        "top": "20px",
-                                        "height": "680px",  # Mesma altura do card do mapa (600px + padding)
-                                        "overflowY": "auto",  # Scroll na sidebar se necessário
+                                        "top": "25px",
+                                        "height": "680px",
+                                        "overflowY": "hidden",
+                                        "marginTop": "25px",
+                                        "border": "2px solid #e0e0e0",  # Borda cinza média mais visível
+                                        "borderRadius": "6px",
                                     },
                                 )
                             ],
                             md=4,
-                            className="mb-4",
+                            className="mb-2",  # Reduzido de mb-4 para mb-2
                         ),
                     ]
                 ),
-                # Stores específicos da home
-                dcc.Store(
-                    id="favorites-store",
-                    storage_type="local",
-                    data=[],
-                ),
-                dcc.Store(id="home-favorites-count", data=0),
-                dcc.Store(id="selected-location-data", data=None),
-                dcc.Store(id="map-click-data", data=None),
-                # Toast para notificações
-                html.Div(
-                    id="toast-container",
-                    style={
-                        "position": "fixed",
-                        "top": "80px",
-                        "right": "20px",
-                        "zIndex": 9999,
-                        "minWidth": "300px",
-                    },
-                ),
             ],
             fluid=False,  # Container com margens laterais
-            className="pb-2 px-2",  # Padding bottom e lateral
-        )
+            className="py-3",
+        ),
+        # Stores específicos da home
+        dcc.Store(
+            id="favorites-store",
+            storage_type="local",
+            data=[],
+        ),
+        dcc.Store(id="home-favorites-count", data=0),
+        dcc.Store(id="selected-location-data", data=None),
+        dcc.Store(id="map-click-data", data=None),
+        # Toast para notificações
+        html.Div(
+            id="toast-container",
+            style={
+                "position": "fixed",
+                "top": "80px",
+                "right": "20px",
+                "zIndex": 9999,
+                "minWidth": "300px",
+            },
+        ),
     ],
 )
 

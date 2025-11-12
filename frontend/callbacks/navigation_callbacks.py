@@ -173,6 +173,20 @@ def register_navigation_callbacks(app):
         else:  # Home ou qualquer outra página
             return True, False, False, False
 
+    # Navigation callback - Atualiza título da página baseado na rota
+    @app.callback(Output("page-title", "children"), [Input("url", "pathname")])
+    def update_page_title(pathname):
+        """
+        Atualiza o título da aba do navegador baseado na página atual.
+        """
+        titles = {
+            "/": "🌦️ EVAonline: Home",
+            "/eto-calculator": "🌦️ EVAonline: Calcular ETo",
+            "/documentation": "🌦️ EVAonline: Documentação",
+            "/about": "🌦️ EVAonline: Sobre",
+        }
+        return titles.get(pathname, "🌦️ EVAonline")
+
     # Navigation callback - Simula loading entre páginas
     @app.callback(
         Output("page-loading", "children"), [Input("url", "pathname")]

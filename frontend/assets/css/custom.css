@@ -1,5 +1,102 @@
 /* Custom CSS for EVAONLINE - ETO Calculator */
 
+/* ===== FORÇA REDUÇÃO DE ESPAÇO - PRIORIDADE MÁXIMA ===== */
+
+/* CRÍTICO: Remove padding-bottom do page-content */
+#page-content {
+    padding-bottom: 0 !important;
+}
+
+/* Força zero spacing em TUDO */
+* {
+    margin-block-end: 0 !important;
+    margin-block-start: 0 !important;
+}
+
+/* Dash app content sem espaçamento */
+._dash-app-content,
+#react-entry-point,
+#_pages_plugin_content {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* DIV principal da página home */
+body>div,
+body>div>div {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* Container com classes pb-0 px-2 */
+.pb-0 {
+    padding-bottom: 0 !important;
+}
+
+/* ===== Page Layout Spacing ===== */
+
+/* Remove todos os espaçamentos excessivos */
+body,
+html {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Container principal sem padding/margin inferior */
+.container,
+.container-fluid {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* Consistent top margin for all main content sections */
+.container>.row {
+    margin-top: 25px !important;
+    margin-bottom: 0px !important;
+}
+
+/* Accordion instructions spacing */
+.accordion {
+    margin-top: 0px !important;
+}
+
+/* Reduzir espaço entre conteúdo e footer */
+footer,
+footer.bg-white {
+    margin-top: 5px !important;
+    padding-top: 5px !important;
+}
+
+/* Elemento anterior ao footer sem margem */
+.container>*:last-child,
+.row:last-child {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* ===== Accordion Improvements ===== */
+
+/* Make accordion arrow more visible */
+.accordion-button::after {
+    width: 1.5rem;
+    height: 1.5rem;
+    background-size: 1.5rem;
+    filter: brightness(0.7);
+}
+
+.accordion-button:not(.collapsed)::after {
+    filter: brightness(0.5);
+}
+
+/* Accordion button hover effect */
+.accordion-button:hover {
+    background-color: #f8f9fa;
+}
+
+.accordion-button:hover::after {
+    filter: brightness(0.4);
+}
+
 /* ===== Button Animations ===== */
 
 /* Pulse animation when button becomes enabled */
@@ -59,4 +156,47 @@
     padding: 8px 12px;
     font-size: 0.875rem;
     text-align: left;
+}
+
+/* ===== Footer Enhancements ===== */
+
+/* Hover effect for partner logos */
+.logo-partner {
+    transition: all 0.3s ease;
+    filter: grayscale(0%);
+}
+
+.logo-partner:hover {
+    transform: scale(1.1);
+    filter: grayscale(0%) brightness(1.1);
+}
+
+/* GitHub icon hover */
+.github-icon:hover {
+    transform: scale(1.15) rotate(5deg);
+}
+
+/* License link hover */
+.license-link:hover i {
+    color: #0d6efd !important;
+    transform: scale(1.1);
+}
+
+/* Documentation link hover */
+.docs-link:hover i {
+    color: #198754 !important;
+    transform: scale(1.1);
+}
+
+/* Layer control checkbox hover */
+.layer-checkbox-label:hover {
+    background-color: #f8f9fa;
+}
+
+/* Responsive footer adjustments */
+@media (max-width: 768px) {
+    footer .container {
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+    }
 }

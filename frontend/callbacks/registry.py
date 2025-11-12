@@ -24,6 +24,9 @@ def register_all_callbacks(app):
 
         register_navigation_callbacks(app)
 
+        # ✅ Callbacks da navbar (tradução PT/EN)
+        from . import navbar_callbacks  # Importa para registrar os callbacks
+
         # 🔄 Callbacks a serem reativados conforme necessário:
         # from .eto_callbacks import register_eto_callbacks
         # register_eto_callbacks(app)
