@@ -6,7 +6,7 @@ para compatibilidade com Celery tasks e scripts legados.
 
 API: https://api.open-meteo.com/v1/forecast
 Cobertura: Global
-Período: (hoje - 30 dias) até (hoje + 5 dias)
+Período: (hoje - 25 dias) até (hoje + 5 dias) = 30 dias totais
 Resolução: Diária (agregada de dados horários)
 Licença: CC BY 4.0 (atribuição obrigatória)
 
@@ -64,7 +64,7 @@ class OpenMeteoForecastSyncAdapter:
         cache_type = "Redis" if cache else "Local"
         logger.info(
             f"OpenMeteoForecastSyncAdapter initialized ({cache_type} cache, "
-            f"-30d to +5d)"
+            f"-25d to +5d = 30d total)"
         )
 
     def get_data_sync(
@@ -83,15 +83,15 @@ class OpenMeteoForecastSyncAdapter:
         if isinstance(end_date, str):
             end_date = datetime.fromisoformat(end_date)
 
-        # Validação - Forecast API: -30d to +5d
+        # Validação - Forecast API: -25d to +5d (30 dias totais)
         today = datetime.now().date()
-        min_date = today - timedelta(days=30)
+        min_date = today - timedelta(days=25)
         max_date = today + timedelta(days=5)
 
         if start_date.date() < min_date:
             logger.warning(
                 f"Forecast: ajustando start_date para {min_date} "
-                f"(limite: hoje - 30 dias)"
+                f"(limite: hoje - 25 dias)"
             )
             start_date = datetime.combine(min_date, datetime.min.time())
 
@@ -102,10 +102,31 @@ class OpenMeteoForecastSyncAdapter:
             )
             end_date = datetime.combine(max_date, datetime.min.time())
 
-        # Executar async
-        return asyncio.run(
-            self._async_get_data(lat, lon, start_date, end_date)
-        )
+        # Executar async de forma segura (igual Archive adapter)
+        try:
+            # Tentar obter loop existente
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Loop já está rodando (contexto de servidor async)
+                # Criar nova task no loop existente
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self._async_get_data(lat, lon, start_date, end_date),
+                    )
+                    return future.result()
+            else:
+                # Loop existe mas não está rodando
+                return loop.run_until_complete(
+                    self._async_get_data(lat, lon, start_date, end_date)
+                )
+        except RuntimeError:
+            # Nenhum loop, criar um novo
+            return asyncio.run(
+                self._async_get_data(lat, lon, start_date, end_date)
+            )
 
     async def _async_get_data(
         self,
@@ -182,7 +203,24 @@ class OpenMeteoForecastSyncAdapter:
         """
         Verifica se Forecast API está acessível (síncrono).
         """
-        return asyncio.run(self._async_health_check())
+        try:
+            # Tentar obter loop existente
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Loop já está rodando
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run, self._async_health_check()
+                    )
+                    return future.result()
+            else:
+                # Loop existe mas não está rodando
+                return loop.run_until_complete(self._async_health_check())
+        except RuntimeError:
+            # Nenhum loop, criar um novo
+            return asyncio.run(self._async_health_check())
 
     async def _async_health_check(self) -> bool:
         """

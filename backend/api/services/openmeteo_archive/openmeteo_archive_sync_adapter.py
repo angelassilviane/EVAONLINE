@@ -94,10 +94,31 @@ class OpenMeteoArchiveSyncAdapter:
             )
             end_date = max_date
 
-        # Executar async
-        return asyncio.run(
-            self._async_get_data(lat, lon, start_date, end_date)
-        )
+        # Executar async de forma segura
+        try:
+            # Tentar obter loop existente
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Loop já está rodando (contexto de servidor async)
+                # Criar nova task no loop existente
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self._async_get_data(lat, lon, start_date, end_date),
+                    )
+                    return future.result()
+            else:
+                # Loop existe mas não está rodando
+                return loop.run_until_complete(
+                    self._async_get_data(lat, lon, start_date, end_date)
+                )
+        except RuntimeError:
+            # Nenhum loop, criar um novo
+            return asyncio.run(
+                self._async_get_data(lat, lon, start_date, end_date)
+            )
 
     async def _async_get_data(
         self,

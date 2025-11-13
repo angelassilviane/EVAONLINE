@@ -64,7 +64,7 @@ class EToCalculationService:
             measurements: Dict com variáveis climáticas
 
         Returns:
-            True se validado, False caso contrário
+            True se validado
 
         Raises:
             ValueError: Se alguma variável obrigatória está ausente
@@ -77,23 +77,30 @@ class EToCalculationService:
             "WS2M",
             "PRECTOTCORR",
             "ALLSKY_SFC_SW_DWN",
-            "PS",
             "latitude",
             "longitude",
             "date",
             "elevation_m",
         ]
 
-        for var in required_vars:
-            if var not in measurements:
-                raise ValueError(f"Variável obrigatória ausente: {var}")
+        missing_vars = [
+            var for var in required_vars if var not in measurements
+        ]
 
-        # Validar ranges razoáveis
+        if missing_vars:
+            raise ValueError(
+                f"Variáveis obrigatórias ausentes: {', '.join(missing_vars)}"
+            )
+
+        # Validar ranges razoáveis (apenas se variável existe)
         if not (-90 <= measurements["latitude"] <= 90):
             raise ValueError("Latitude deve estar entre -90 e 90")
         if not (-180 <= measurements["longitude"] <= 180):
             raise ValueError("Longitude deve estar entre -180 e 180")
-        if measurements["elevation_m"] < -500 or measurements["elevation_m"] > 9000:
+        if (
+            measurements["elevation_m"] < -500
+            or measurements["elevation_m"] > 9000
+        ):
             raise ValueError("Elevação deve estar entre -500 e 9000 metros")
         if not (0 <= measurements["RH2M"] <= 100):
             raise ValueError("Umidade relativa deve estar entre 0 e 100%")
@@ -104,7 +111,9 @@ class EToCalculationService:
 
         return True
 
-    def calculate_et0(self, measurements: Dict[str, float], method: str = "pm") -> Dict[str, Any]:
+    def calculate_et0(
+        self, measurements: Dict[str, float], method: str = "pm"
+    ) -> Dict[str, Any]:
         """
         Calcula ET0 diária usando FAO-56 Penman-Monteith.
 
@@ -161,11 +170,13 @@ class EToCalculationService:
             T_mean = measurements["T2M_MEAN"]
             RH_mean = measurements["RH2M"]
             u2 = measurements["WS2M"]
-            P = measurements["PS"]
             Rs = measurements["ALLSKY_SFC_SW_DWN"]  # MJ/m²/dia
             z = measurements["elevation_m"]
             lat = measurements["latitude"]
             date_str = measurements["date"]
+
+            # Calcular pressão atmosférica pela elevação (FAO-56 Eq. 7)
+            P = 101.3 * ((293 - 0.0065 * z) / 293) ** 5.26
 
             # 3. Cálculos intermediários FAO-56
 
@@ -206,7 +217,10 @@ class EToCalculationService:
             Cn = 900  # Coeficiente para ETo
             Cd = 0.34  # Coeficiente para ETo
 
-            numerator = 0.408 * slope * (Rn - G) + gamma * (Cn / (T_mean + 273)) * u2 * Vpd
+            numerator = (
+                0.408 * slope * (Rn - G)
+                + gamma * (Cn / (T_mean + 273)) * u2 * Vpd
+            )
             denominator = slope + gamma * (1 + Cd * u2)
 
             if denominator == 0:
@@ -296,7 +310,9 @@ class EToCalculationService:
         b = 2 * math.pi * (N - 1) / 365.0
         return 0.409 * math.sin(b - 1.39)
 
-    def _extraterrestrial_radiation(self, lat: float, N: int, delta: float) -> float:
+    def _extraterrestrial_radiation(
+        self, lat: float, N: int, delta: float
+    ) -> float:
         """
         Radiação extraterrestre (FAO-56 Eq. 21).
 
@@ -494,7 +510,13 @@ class EToProcessingService:
                 raise ValueError("Falha ao obter dados meteorológicos")
 
             # 2. Preprocessing
-            weather_data, preprocessing_warnings = preprocessing(weather_data, latitude)
+            weather_data, preprocessing_warnings = preprocessing(
+                weather_data, latitude
+            )
+
+            # Adicionar elevation ao DataFrame antes da fusão
+            if elevation:
+                weather_data["elevation_m"] = elevation
 
             # 3. Fusion (Kalman com histórico)
             weather_data_fused, fusion_warnings = await self._fuse_data(
@@ -503,13 +525,13 @@ class EToProcessingService:
 
             # 4. ETo Cálculo para cada dia
             et0_series = []
+            raw_data_list = []  # Para salvar no banco
+
             for idx, row in weather_data_fused.iterrows():
                 measurements = row.to_dict()
                 measurements["latitude"] = latitude
                 measurements["longitude"] = longitude
                 measurements["date"] = str(idx.date())
-                if elevation:
-                    measurements["elevation_m"] = elevation
 
                 et0_result = self.et0_calc.calculate_et0(measurements)
 
@@ -517,18 +539,38 @@ class EToProcessingService:
                 historical = await self._get_historical_et0_normal(
                     latitude, longitude, str(idx.date())
                 )
-                anomaly = self.et0_calc.detect_anomalies(et0_result["et0_mm_day"], historical)
+                anomaly = self.et0_calc.detect_anomalies(
+                    et0_result["et0_mm_day"], historical
+                )
 
-                et0_series.append(
+                et0_data = {
+                    "date": str(idx.date()),
+                    "et0_mm_day": et0_result["et0_mm_day"],
+                    "quality": et0_result["quality"],
+                    "anomaly": anomaly,
+                }
+                et0_series.append(et0_data)
+
+                # Preparar dados para salvamento
+                raw_data_list.append(
                     {
-                        "date": str(idx.date()),
-                        "et0_mm_day": et0_result["et0_mm_day"],
-                        "quality": et0_result["quality"],
-                        "anomaly": anomaly,
+                        "date": measurements["date"],
+                        "raw_data": measurements,
+                        "eto_result": et0_result,
                     }
                 )
 
-            # 6. Recomendações (agrícolas)
+            # 6. ✅ NOVO: Salvar dados no banco PostgreSQL
+            if self.db_session and et0_series:
+                await self._save_to_database(
+                    latitude=latitude,
+                    longitude=longitude,
+                    elevation=elevation,
+                    source_api=database,
+                    raw_data_list=raw_data_list,
+                )
+
+            # 7. Recomendações (agrícolas)
             recomendations = None
             if include_recomendations:
                 recomendations = self._generate_recomendations(et0_series)
@@ -537,7 +579,9 @@ class EToProcessingService:
                 "location": {"lat": latitude, "lon": longitude},
                 "period": {"start": start_date, "end": end_date},
                 "et0_series": et0_series,
+                "eto_data": et0_series,  # Compatibilidade com formato antigo
                 "summary": self._summarize_series(et0_series),
+                "statistics": self._summarize_series(et0_series),  # Alias
                 "recomendations": recomendations,
             }
 
@@ -561,17 +605,28 @@ class EToProcessingService:
         """
         warnings = []
         try:
-            # Converter para dict para Kalman
-            data_dicts = weather_data.to_dict(orient="records")
+            # Processar cada registro individualmente
+            fused_records = []
 
-            # Usar wrapper síncrono se disponível
-            if hasattr(self.kalman, "auto_fuse_sync"):
-                result = self.kalman.auto_fuse_sync(latitude, longitude, data_dicts)
-            else:
-                # Fallback para async
-                result = await self.kalman.auto_fuse(latitude, longitude, data_dicts)
+            for _, row in weather_data.iterrows():
+                # Converter linha para dict
+                current_measurements = row.to_dict()
 
-            fused_df = pd.DataFrame(result)
+                # Usar wrapper síncrono se disponível
+                if hasattr(self.kalman, "auto_fuse_sync"):
+                    result = self.kalman.auto_fuse_sync(
+                        latitude, longitude, current_measurements
+                    )
+                else:
+                    # Fallback para async
+                    result = await self.kalman.auto_fuse(
+                        latitude, longitude, current_measurements
+                    )
+
+                fused_records.append(result)
+
+            # Criar DataFrame preservando o índice datetime original
+            fused_df = pd.DataFrame(fused_records, index=weather_data.index)
             return fused_df, warnings
 
         except Exception as e:
@@ -625,6 +680,123 @@ class EToProcessingService:
             self.logger.debug(f"Não foi possível obter histórico: {str(e)}")
             return None
 
+    async def _save_to_database(
+        self,
+        latitude: float,
+        longitude: float,
+        elevation: Optional[float],
+        source_api: str,
+        raw_data_list: List[Dict[str, Any]],
+    ) -> None:
+        """
+        Salva dados climáticos e ETo no banco PostgreSQL.
+
+        Args:
+            latitude: Latitude
+            longitude: Longitude
+            elevation: Elevação em metros
+            source_api: Nome da API fonte
+            raw_data_list: Lista com dados brutos e resultados
+        """
+        try:
+            from backend.database.models.climate_data import ClimateData
+            from datetime import datetime as dt
+
+            saved_count = 0
+
+            for data_item in raw_data_list:
+                try:
+                    date_str = data_item["date"]
+                    date_obj = dt.strptime(date_str, "%Y-%m-%d")
+
+                    # Verificar se já existe
+                    existing = (
+                        self.db_session.query(ClimateData)
+                        .filter_by(
+                            source_api=source_api,
+                            latitude=latitude,
+                            longitude=longitude,
+                            date=date_obj,
+                        )
+                        .first()
+                    )
+
+                    if existing:
+                        # Atualizar registro existente
+                        # Converter NaN para None (PostgreSQL JSONB)
+                        import math
+
+                        raw_data_clean = {}
+                        for k, v in data_item["raw_data"].items():
+                            if isinstance(v, float) and math.isnan(v):
+                                raw_data_clean[k] = None
+                            else:
+                                raw_data_clean[k] = v
+
+                        existing.raw_data = raw_data_clean
+                        existing.eto_mm_day = data_item["eto_result"][
+                            "et0_mm_day"
+                        ]
+                        existing.eto_method = data_item["eto_result"]["method"]
+                        existing.quality_flags = {
+                            "quality": data_item["eto_result"]["quality"]
+                        }
+                        existing.elevation = elevation
+                        existing.updated_at = dt.utcnow()
+                    else:
+                        # Criar novo registro
+                        # Converter NaN para None (PostgreSQL JSONB)
+                        import math
+
+                        raw_data_clean = {}
+                        for k, v in data_item["raw_data"].items():
+                            if isinstance(v, float) and math.isnan(v):
+                                raw_data_clean[k] = None
+                            else:
+                                raw_data_clean[k] = v
+
+                        climate_record = ClimateData(
+                            source_api=source_api,
+                            latitude=latitude,
+                            longitude=longitude,
+                            elevation=elevation,
+                            date=date_obj,
+                            raw_data=raw_data_clean,  # Sem NaN
+                            harmonized_data=None,  # TODO: Implementar harmonização
+                            eto_mm_day=data_item["eto_result"]["et0_mm_day"],
+                            eto_method=data_item["eto_result"]["method"],
+                            quality_flags={
+                                "quality": data_item["eto_result"]["quality"]
+                            },
+                            processing_metadata={
+                                "components": data_item["eto_result"].get(
+                                    "components", {}
+                                ),
+                                "processed_at": dt.utcnow().isoformat(),
+                            },
+                        )
+                        self.db_session.add(climate_record)
+
+                    saved_count += 1
+
+                except Exception as e:
+                    self.logger.warning(
+                        f"Erro ao salvar registro {date_str}: {str(e)}"
+                    )
+                    continue
+
+            # Commit de todos os registros
+            self.db_session.commit()
+            self.logger.info(
+                f"✅ {saved_count} registros salvos no banco "
+                f"(fonte: {source_api})"
+            )
+
+        except Exception as e:
+            self.logger.error(f"❌ Erro ao salvar no banco: {str(e)}")
+            self.db_session.rollback()
+            # Não falhar a requisição por erro de salvamento
+
     def _generate_recomendations(self, et0_series: List[Dict]) -> List[str]:
         """
         Gera recomendações agrícolas baseadas em ET0.
@@ -655,10 +827,14 @@ class EToProcessingService:
             recs.append(f"✓ ET0 normal: ~{mean_et0:.1f} mm/dia")
 
         if len(anomalies) > len(et0_series) * 0.3:
-            recs.append(f"⚠️ Anomalias em {len(anomalies)} dias - revisar dados climáticos")
+            recs.append(
+                f"⚠️ Anomalias em {len(anomalies)} dias - revisar dados climáticos"
+            )
 
         total_irrigation = total_et0 * 1.1  # Coeficiente de cultura = 1.1
-        recs.append(f"💧 Irrigação estimada: {total_irrigation:.1f} mm para o período")
+        recs.append(
+            f"💧 Irrigação estimada: {total_irrigation:.1f} mm para o período"
+        )
 
         return recs
 
@@ -683,7 +859,9 @@ class EToProcessingService:
             "et0_mean_mm_day": round(sum(values) / len(values), 2),
             "et0_max_mm_day": round(max(values), 2),
             "et0_min_mm_day": round(min(values), 2),
-            "anomaly_count": sum(1 for d in et0_series if d["anomaly"]["is_anomaly"]),
+            "anomaly_count": sum(
+                1 for d in et0_series if d["anomaly"]["is_anomaly"]
+            ),
         }
 
     @log_execution_time
@@ -719,9 +897,15 @@ class EToProcessingService:
             Dict com resultado completo no formato do endpoint /calculate
         """
         try:
-            from backend.api.services.climate_source_manager import ClimateSourceManager
-            from backend.core.data_processing.data_download import download_weather_data
-            from backend.core.data_processing.data_preprocessing import preprocessing
+            from backend.api.services.climate_source_manager import (
+                ClimateSourceManager,
+            )
+            from backend.core.data_processing.data_download import (
+                download_weather_data,
+            )
+            from backend.core.data_processing.data_preprocessing import (
+                preprocessing,
+            )
 
             # 1. Baixar dados de cada fonte selecionada
             all_weather_data = []
@@ -730,7 +914,8 @@ class EToProcessingService:
             for source_id in sources:
                 try:
                     self.logger.info(
-                        f"📥 Baixando dados de {source_id} para " f"({latitude}, {longitude})"
+                        f"📥 Baixando dados de {source_id} para "
+                        f"({latitude}, {longitude})"
                     )
                     weather_data, warnings = download_weather_data(
                         source_id, start_date, end_date, longitude, latitude
@@ -743,18 +928,25 @@ class EToProcessingService:
                         if warnings:
                             fusion_warnings.extend(warnings)
                         self.logger.info(
-                            f"✅ Dados de {source_id}: " f"{len(weather_data)} registros"
+                            f"✅ Dados de {source_id}: "
+                            f"{len(weather_data)} registros"
                         )
                     else:
                         self.logger.warning(f"⚠️ Sem dados de {source_id}")
-                        fusion_warnings.append(f"Sem dados disponíveis de {source_id}")
+                        fusion_warnings.append(
+                            f"Sem dados disponíveis de {source_id}"
+                        )
 
                 except Exception as e:
-                    self.logger.error(f"❌ Erro ao baixar {source_id}: {str(e)}")
+                    self.logger.error(
+                        f"❌ Erro ao baixar {source_id}: {str(e)}"
+                    )
                     fusion_warnings.append(f"Erro em {source_id}: {str(e)}")
 
             if not all_weather_data:
-                raise ValueError("Nenhum dado climático disponível das fontes selecionadas.")
+                raise ValueError(
+                    "Nenhum dado climático disponível das fontes selecionadas."
+                )
 
             # 2. Combinar dados de todas as fontes
             import pandas as pd
@@ -762,7 +954,9 @@ class EToProcessingService:
             combined_data = pd.concat(all_weather_data, ignore_index=True)
 
             # 3. Preprocessing
-            combined_data, preprocessing_warnings = preprocessing(combined_data, latitude)
+            combined_data, preprocessing_warnings = preprocessing(
+                combined_data, latitude
+            )
             fusion_warnings.extend(preprocessing_warnings)
 
             # 4. Fusão usando Kalman Ensemble
@@ -772,10 +966,13 @@ class EToProcessingService:
                 )
                 weather_data_fused = pd.DataFrame(fused_data)
                 self.logger.info(
-                    f"🔬 Fusão concluída: {len(weather_data_fused)} " f"registros fusionados"
+                    f"🔬 Fusão concluída: {len(weather_data_fused)} "
+                    f"registros fusionados"
                 )
             except Exception as e:
-                self.logger.warning(f"Fusão falhou, usando dados combinados: {str(e)}")
+                self.logger.warning(
+                    f"Fusão falhou, usando dados combinados: {str(e)}"
+                )
                 weather_data_fused = combined_data
                 fusion_warnings.append(f"Erro na fusão: {str(e)}")
 
@@ -787,7 +984,9 @@ class EToProcessingService:
                     measurements = row.to_dict()
                     measurements["latitude"] = latitude
                     measurements["longitude"] = longitude
-                    measurements["date"] = str(idx.date()) if hasattr(idx, "date") else str(idx)
+                    measurements["date"] = (
+                        str(idx.date()) if hasattr(idx, "date") else str(idx)
+                    )
                     if elevation:
                         measurements["elevation_m"] = elevation
 
@@ -806,7 +1005,9 @@ class EToProcessingService:
                     )
 
                 except Exception as e:
-                    self.logger.warning(f"Erro no cálculo ETo para {idx}: {str(e)}")
+                    self.logger.warning(
+                        f"Erro no cálculo ETo para {idx}: {str(e)}"
+                    )
                     continue
 
             if not et0_series:
@@ -819,13 +1020,20 @@ class EToProcessingService:
                 "et0_series": et0_series,
                 "summary": {
                     "total_days": len(et0_series),
-                    "et0_total_mm": round(sum(d["et0_mm_day"] for d in et0_series), 1),
+                    "et0_total_mm": round(
+                        sum(d["et0_mm_day"] for d in et0_series), 1
+                    ),
                     "et0_mean_mm_day": round(
-                        sum(d["et0_mm_day"] for d in et0_series) / len(et0_series),
+                        sum(d["et0_mm_day"] for d in et0_series)
+                        / len(et0_series),
                         2,
                     ),
-                    "et0_max_mm_day": round(max(d["et0_mm_day"] for d in et0_series), 2),
-                    "et0_min_mm_day": round(min(d["et0_mm_day"] for d in et0_series), 2),
+                    "et0_max_mm_day": round(
+                        max(d["et0_mm_day"] for d in et0_series), 2
+                    ),
+                    "et0_min_mm_day": round(
+                        min(d["et0_mm_day"] for d in et0_series), 2
+                    ),
                     "anomaly_count": 0,
                 },
                 "recomendations": [
@@ -834,13 +1042,18 @@ class EToProcessingService:
                         f"{round(sum(d['et0_mm_day'] for d in et0_series) * 1.1, 1)} "
                         f"mm para o período"
                     ),
-                    (f"✅ Cálculo baseado em {len(sources)} " f"fontes fusionadas"),
+                    (
+                        f"✅ Cálculo baseado em {len(sources)} "
+                        f"fontes fusionadas"
+                    ),
                 ],
             }
 
             # 7. Adicionar metadados da fusão
             source_manager = ClimateSourceManager()
-            fusion_weights = source_manager.get_fusion_weights(sources, (latitude, longitude))
+            fusion_weights = source_manager.get_fusion_weights(
+                sources, (latitude, longitude)
+            )
 
             # 8. Formatar resposta final
             from datetime import datetime
@@ -856,7 +1069,9 @@ class EToProcessingService:
                     "strategy": "configurable_fusion",
                     "sources_selected": sources,
                     "sources_available": len(
-                        source_manager.get_available_sources_for_location(latitude, longitude)
+                        source_manager.get_available_sources_for_location(
+                            latitude, longitude
+                        )
                     ),
                     "fusion_weights": fusion_weights,
                     "quality_score": min(1.0, len(sources) / 7.0),
@@ -870,5 +1085,7 @@ class EToProcessingService:
             }
 
         except Exception as e:
-            self.logger.error(f"Erro no processamento com múltiplas fontes: {str(e)}")
+            self.logger.error(
+                f"Erro no processamento com múltiplas fontes: {str(e)}"
+            )
             raise

@@ -9,29 +9,33 @@ from loguru import logger
 
 def classify_request_type(data_inicial: datetime, data_final: datetime) -> str:
     """
-    Classifica requisição: histórico ou atual/forecast.
+    Classifica requisição: histórico, atual ou forecast.
 
-    Regra: Se data_inicial <= hoje - 30 dias → HISTÓRICO
-           Senão → ATUAL/FORECAST
+    Regras:
+    - Se data_final > hoje → FORECAST
+    - Se data_inicial <= hoje - 30 dias → HISTÓRICO
+    - Senão → ATUAL
 
     Args:
         data_inicial: Data inicial da requisição
         data_final: Data final da requisição
 
     Returns:
-        "historical" ou "current"
+        "historical", "current" ou "forecast"
     """
-    threshold = datetime.now() - timedelta(days=30)
-
-    # Comparar apenas as datas (sem horários)
-    data_inicial_date = (
+    today = datetime.now().date()
+    start_date = (
         data_inicial.date() if hasattr(data_inicial, "date") else data_inicial
     )
-    threshold_date = (
-        threshold.date() if hasattr(threshold, "date") else threshold
-    )
+    end_date = data_final.date() if hasattr(data_final, "date") else data_final
+    threshold = today - timedelta(days=30)
 
-    return "historical" if data_inicial_date <= threshold_date else "current"
+    if end_date > today:
+        return "forecast"
+    elif start_date <= threshold:
+        return "historical"
+    else:
+        return "current"
 
 
 @shared_task
@@ -48,7 +52,7 @@ def download_weather_data(
 
     Fontes suportadas:
     - "nasa_power": NASA POWER (global, 1981+, domínio público)
-    - "openmeteo_archive": Open-Meteo Archive (global, 1950+, CC BY 4.0)
+    - "openmeteo_archive": Open-Meteo Archive (global, 1940+, CC BY 4.0)
     - "openmeteo_forecast": Open-Meteo Forecast (global, 16d, CC BY 4.0)
     - "met_norway": MET Norway Locationforecast
       (global, real-time, CC BY 4.0)
@@ -97,16 +101,6 @@ def download_weather_data(
         logger.error(msg)
         raise ValueError(msg)
 
-    # Verifica se é uma data válida (não futura para dados históricos)
-    data_atual = pd.to_datetime(datetime.now().date())
-    if data_inicial_formatted > data_atual:
-        msg = (
-            "A data inicial não pode ser futura para dados históricos. "
-            f"Data atual: {data_atual.strftime('%Y-%m-%d')}"
-        )
-        logger.error(msg)
-        raise ValueError(msg)
-
     # Verifica ordem das datas
     if data_final_formatted < data_inicial_formatted:
         msg = "A data final deve ser posterior à data inicial"
@@ -120,22 +114,49 @@ def download_weather_data(
         logger.error(msg)
         raise ValueError(msg)
 
-    # Classificar tipo de requisição (histórico vs atual/forecast)
+    # Data atual
+    current_date = pd.to_datetime(datetime.now().date())
+
+    # Classificar tipo de requisição (histórico vs atual vs forecast)
     request_type = classify_request_type(
         data_inicial_formatted, data_final_formatted
     )
     logger.info(f"Tipo de requisição: {request_type}")
 
+    # Verifica se é uma data válida (não futura para dados históricos/atual)
+    if request_type in ["historical", "current"]:
+        if data_inicial_formatted > current_date:
+            msg = (
+                "A data inicial não pode ser futura para dados "
+                f"históricos ou atuais. Data atual: "
+                f"{current_date.strftime('%Y-%m-%d')}"
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+
     # Validações de período por tipo de requisição
+    if request_type == "historical" and not (1 <= period_days <= 90):
+        msg = "Dados históricos: período entre 1 e 90 dias"
+        logger.error(msg)
+        raise ValueError(msg)
+
     if request_type == "current" and not (7 <= period_days <= 30):
         msg = "Dados atuais: período entre 7 e 30 dias"
         logger.error(msg)
         raise ValueError(msg)
 
-    if request_type == "historical" and period_days > 90:
-        msg = "Dados históricos: período máximo de 90 dias"
-        logger.error(msg)
-        raise ValueError(msg)
+    if request_type == "forecast":
+        forecast_max = current_date + pd.Timedelta(days=5)
+        if data_final_formatted > forecast_max:
+            msg = "Dados forecast: período máximo até hoje + 5 dias"
+            logger.error(msg)
+            raise ValueError(msg)
+        # Permitir start até today - 25d para OpenMeteo
+        min_start = current_date - pd.Timedelta(days=25)
+        if data_inicial_formatted < min_start:
+            msg = "Dados forecast: data inicial deve ser >= " "hoje - 25 dias"
+            logger.error(msg)
+            raise ValueError(msg)
 
     # Validação dinâmica de fontes disponíveis para a localização
     source_manager = ClimateSourceManager()
@@ -174,15 +195,17 @@ def download_weather_data(
     if isinstance(data_source, list):
         requested = [str(s).lower() for s in data_source]
     else:
-        requested = [str(data_source).lower()]
+        # Suportar string com múltiplas fontes separadas por vírgula
+        data_source_str = str(data_source).lower()
+        if "," in data_source_str:
+            requested = [s.strip() for s in data_source_str.split(",")]
+        else:
+            requested = [data_source_str]
 
     # Validate requested sources
     for req in requested:
         if req not in valid_sources:
-            msg = (
-                f"Fonte inválida: {data_source}. Use: "
-                f"{', '.join(valid_sources)}"
-            )
+            msg = f"Fonte inválida: {req}. Use: " f"{', '.join(valid_sources)}"
             logger.error(msg)
             raise ValueError(msg)
 
@@ -201,48 +224,57 @@ def download_weather_data(
             logger.error(msg)
             raise ValueError(msg)
 
-    # Define sources to query
+    # Define sources to query based on request_type and availability
     if "data fusion" in requested:
         # Data Fusion combina múltiplas fontes com Kalman Ensemble
-        # Usar apenas fontes disponíveis para esta localização
-        sources = [
-            src
-            for src in [
-                "openmeteo_archive",  # Prioridade 1: histórico (1940+)
-                "nasa_power",  # Prioridade 2: confiável (1981+)
-                "met_norway",  # Prioridade 3: Global, 5d
-                "nws_forecast",  # Prioridade 4: USA, tempo real
-                "openmeteo_forecast",  # Prioridade 5: Futuro, 5 dias
-                "nws_stations",  # Prioridade 6: USA stations
+        # Selecionar fontes baseadas no tipo de requisição
+        if request_type == "historical":
+            possible_sources = ["nasa_power", "openmeteo_archive"]
+        elif request_type == "current":
+            possible_sources = [
+                "openmeteo_archive",
+                "nasa_power",
+                "met_norway",
+                "nws_forecast",
+                "openmeteo_forecast",
+                "nws_stations",
             ]
-            if src in available_source_ids
+        elif request_type == "forecast":
+            possible_sources = [
+                "openmeteo_forecast",
+                "met_norway",
+                "nws_forecast",
+            ]
+
+        sources = [
+            src for src in possible_sources if src in available_source_ids
         ]
 
         if not sources:
             msg = (
-                f"Nenhuma fonte disponível para as coordenadas "
-                f"({latitude}, {longitude}). Fontes disponíveis globalmente: "
-                f"{available_source_ids}"
+                f"Nenhuma fonte disponível para {request_type} nas coordenadas "
+                f"({latitude}, {longitude})."
             )
             logger.error(msg)
             raise ValueError(msg)
 
         logger.info(
-            "Data Fusion selecionada, coletando de %d fontes disponíveis: %s",
-            len(sources),
-            sources,
+            f"Data Fusion selecionada para {request_type}, coletando de {len(sources)} fontes disponíveis: {sources}"
         )
     else:
-        sources = requested
+        sources = [req for req in requested if req in available_source_ids]
         logger.info(f"Fonte(s) selecionada(s): {sources}")
 
-    current_date = pd.to_datetime(datetime.now().date())
     weather_data_sources: List[pd.DataFrame] = []
     for source in sources:
-        # Validações específicas por fonte de dados
+        logger.info(f"📥 Processando fonte: {source}")
+
+        # Validações específicas por fonte de dados e ajuste de datas
+        data_final_adjusted = data_final_formatted
+
         if source == "nasa_power":
             # NASA POWER: dados históricos desde 1981, sem dados futuros
-            # Padrão EVAonline: >= 1990-01-01
+            # Padrão: >= 1990-01-01
             nasa_start_limit = pd.to_datetime("1990-01-01")
             if data_inicial_formatted < nasa_start_limit:
                 msg = "NASA POWER: data inicial deve ser >= 1990-01-01"
@@ -252,24 +284,32 @@ def download_weather_data(
                 warnings_list.append(
                     "NASA POWER: truncando para data atual (sem dados futuros)"
                 )
+                data_final_adjusted = current_date
 
         elif source == "openmeteo_archive":
-            # Open-Meteo Archive: dados históricos desde 1950
-            # Padrão EVAonline: >= 1990-01-01
+            # Open-Meteo Archive: dados históricos desde 1940, até today - 2d
+            # Padrão: >= 1990-01-01
             oma_start_limit = pd.to_datetime("1990-01-01")
             if data_inicial_formatted < oma_start_limit:
                 msg = "Open-Meteo Archive: data inicial deve ser >= 1990-01-01"
                 logger.error(msg)
                 raise ValueError(msg)
+            max_date = current_date - pd.Timedelta(days=2)
+            if data_final_formatted > max_date:
+                warnings_list.append(
+                    "Open-Meteo Archive: truncando para today - 2d (consolidação)"
+                )
+                data_final_adjusted = max_date
 
         elif source == "openmeteo_forecast":
-            # Open-Meteo Forecast: últimos 90 dias + próximos 16 dias
-            # Padrão EVAonline: últimos 30 dias + próximos 5 dias
-            min_date = current_date - pd.Timedelta(days=30)
+            # Open-Meteo Forecast: (hoje - 25d) até (hoje + 5d)
+            # Total: 30 dias (25 passado + 5 futuro)
+            min_date = current_date - pd.Timedelta(days=25)
             if data_inicial_formatted < min_date:
                 msg = (
-                    f"Open-Meteo Forecast: data inicial deve ser >= {min_date.strftime('%Y-%m-%d')} "
-                    "(máximo 30 dias no passado)"
+                    f"Open-Meteo Forecast: data inicial deve ser >= "
+                    f"{min_date.strftime('%Y-%m-%d')} "
+                    "(máximo 25 dias no passado)"
                 )
                 logger.error(msg)
                 raise ValueError(msg)
@@ -277,13 +317,14 @@ def download_weather_data(
             forecast_limit = current_date + pd.Timedelta(days=5)
             if data_final_formatted > forecast_limit:
                 msg = (
-                    "Open-Meteo Forecast: data final deve ser <= hoje + 5 dias"
+                    "Open-Meteo Forecast: data final deve ser <= "
+                    "hoje + 5 dias"
                 )
                 logger.error(msg)
                 raise ValueError(msg)
 
         elif source == "met_norway":
-            # MET Norway: apenas forecast, hoje até hoje + 9 dias
+            # MET Norway: apenas forecast, hoje até hoje + 5 dias
             # Padrão EVAonline: data atual + 5 dias
             if data_inicial_formatted < current_date:
                 msg = (
@@ -299,10 +340,14 @@ def download_weather_data(
                 raise ValueError(msg)
 
         elif source == "nws_forecast":
-            # NWS Forecast: apenas forecast, hoje até hoje + 5
-            # Padrão EVAonline: data atual + 5 dias
+            # NWS Forecast: previsão de hoje até hoje + 5 dias
+            # IMPORTANTE: Descarta dias incompletos (<20h) para evitar viés
+            # Dia atual só é incluído se tiver >20 horas de dados
             if data_inicial_formatted < current_date:
-                msg = "NWS Forecast: data inicial deve ser >= hoje (sem histórico)"
+                msg = (
+                    "NWS Forecast: data inicial deve ser >= hoje "
+                    "(sem histórico)"
+                )
                 logger.error(msg)
                 raise ValueError(msg)
 
@@ -313,26 +358,24 @@ def download_weather_data(
                 raise ValueError(msg)
 
         elif source == "nws_stations":
-            # NWS Stations: dados reais, apenas hoje-1 até hoje
+            # NWS Stations: observações em tempo real
+            # Dados de estações meteorológicas: (hoje - 1 dia) até hoje
+            # NOTA: Delay de até 20 minutos é normal (MADIS processing)
             min_date = current_date - pd.Timedelta(days=1)
             if data_inicial_formatted < min_date:
                 msg = (
-                    f"NWS Stations: data inicial deve ser >= {min_date.strftime('%Y-%m-%d')} "
-                    "(dados reais das estações, máximo 1 dia)"
+                    f"NWS Stations: data inicial deve ser >= "
+                    f"{min_date.strftime('%Y-%m-%d')} "
+                    "(observações em tempo real: máximo 1 dia passado)"
                 )
                 logger.error(msg)
                 raise ValueError(msg)
 
             if data_final_formatted > current_date:
                 msg = (
-                    "NWS Stations: data final deve ser <= hoje (sem forecast)"
+                    "NWS Stations: data final deve ser <= hoje "
+                    "(sem previsão, apenas observações reais)"
                 )
-                logger.error(msg)
-                raise ValueError(msg)
-
-                # Limite máximo: 1 dia
-            if period_days > 1:
-                msg = "NWS Stations: período máximo de 1 dia (dados reais)"
                 logger.error(msg)
                 raise ValueError(msg)
 
@@ -393,10 +436,7 @@ def download_weather_data(
                 weather_df.set_index("date", inplace=True)
 
                 logger.info(
-                    "NASA POWER: obtidos %d registros para (%s, %s)",
-                    len(nasa_data),
-                    latitude,
-                    longitude,
+                    f"✅ NASA POWER: {len(nasa_data)} registros diários para ({latitude}, {longitude})"
                 )
 
             elif source == "openmeteo_archive":
@@ -427,31 +467,39 @@ def download_weather_data(
                 weather_df["date"] = pd.to_datetime(weather_df["date"])
                 weather_df.set_index("date", inplace=True)
 
+                # Harmonizar variáveis OpenMeteo → NASA format para ETo
+                # ETo: T2M_MAX, T2M_MIN, T2M_MEAN, RH2M, WS2M,
+                #      ALLSKY_SFC_SW_DWN, PRECTOTCORR
+                harmonization = {
+                    "temperature_2m_max": "T2M_MAX",
+                    "temperature_2m_min": "T2M_MIN",
+                    "temperature_2m_mean": "T2M",
+                    "relative_humidity_2m_mean": "RH2M",
+                    "wind_speed_2m_mean": "WS2M",
+                    "shortwave_radiation_sum": "ALLSKY_SFC_SW_DWN",
+                    "precipitation_sum": "PRECTOTCORR",
+                }
+
+                for openmeteo_var, nasa_var in harmonization.items():
+                    if openmeteo_var in weather_df.columns:
+                        weather_df[nasa_var] = weather_df[openmeteo_var]
+
                 logger.info(
-                    "Open-Meteo Archive: obtidos %d registros para (%s, %s)",
-                    len(openmeteo_data),
-                    latitude,
-                    longitude,
+                    f"✅ Open-Meteo Archive: {len(openmeteo_data)} registros diários para ({latitude}, {longitude})"
                 )
 
             elif source == "openmeteo_forecast":
-                # Open-Meteo Forecast (previsão até 16 dias)
+                # Open-Meteo Forecast (previsão + recent: -30d a +5d)
                 from backend.api.services import OpenMeteoForecastSyncAdapter
 
                 adapter = OpenMeteoForecastSyncAdapter()
 
-                # Calcular dias até data final
-                days_to_forecast = (
-                    data_final_adjusted - pd.Timestamp.now()
-                ).days + 1
-                # 1-16 dias
-                days_to_forecast = max(1, min(days_to_forecast, 16))
-
-                # Busca dados via novo adapter síncrono
-                forecast_data = adapter.get_forecast_sync(
+                # Busca dados via adapter síncrono (aceita start/end date)
+                forecast_data = adapter.get_data_sync(
                     lat=latitude,
                     lon=longitude,
-                    days=days_to_forecast,
+                    start_date=data_inicial_formatted,
+                    end_date=data_final_formatted,
                 )
 
                 if not forecast_data:
@@ -468,11 +516,29 @@ def download_weather_data(
                 weather_df["date"] = pd.to_datetime(weather_df["date"])
                 weather_df.set_index("date", inplace=True)
 
+                # Harmonizar variáveis OpenMeteo → NASA format para ETo
+                # ETo: T2M_MAX, T2M_MIN, T2M_MEAN, RH2M, WS2M,
+                # ALLSKY_SFC_SW_DWN, PRECTOTCORR
+                harmonization = {
+                    "temperature_2m_max": "T2M_MAX",
+                    "temperature_2m_min": "T2M_MIN",
+                    "temperature_2m_mean": "T2M_MEAN",  # MEAN not T2M!
+                    "relative_humidity_2m_mean": "RH2M",
+                    "wind_speed_2m_mean": "WS2M",
+                    "shortwave_radiation_sum": "ALLSKY_SFC_SW_DWN",
+                    "precipitation_sum": "PRECTOTCORR",
+                }
+
+                # Renomear colunas existentes
+                for openmeteo_var, nasa_var in harmonization.items():
+                    if openmeteo_var in weather_df.columns:
+                        weather_df[nasa_var] = weather_df[openmeteo_var]
+                        logger.debug(
+                            f"Harmonized: {openmeteo_var} → {nasa_var}"
+                        )
+
                 logger.info(
-                    "Open-Meteo Forecast: obtidos %d registros para (%s, %s)",
-                    len(forecast_data),
-                    latitude,
-                    longitude,
+                    f"✅ Open-Meteo Forecast: {len(forecast_data)} registros diários para ({latitude}, {longitude})"
                 )
 
             elif source == "met_norway":
@@ -725,7 +791,10 @@ def download_weather_data(
                     continue
 
         except Exception as e:
-            logger.error("%s: erro ao baixar dados: %s", source, str(e))
+            logger.error(
+                f"{source}: erro ao baixar dados: {str(e)}",
+                exc_info=True,  # Mostra traceback completo
+            )
             warnings_list.append(f"{source}: erro ao baixar dados: {str(e)}")
             continue
 
@@ -801,97 +870,24 @@ def download_weather_data(
         weather_data_sources.append(weather_df)
         logger.debug("%s: DataFrame obtido\n%s", source, weather_df)
 
-    # Realiza fusão se necessário
-    weather_data = None  # ✅ Inicializar antes do uso
+    # Consolidar dados (fusão Kalman feita em eto_services.py)
+    if not weather_data_sources:
+        msg = "Nenhuma fonte forneceu dados válidos"
+        logger.error(msg)
+        raise ValueError(msg)
 
-    if "data fusion" in requested:
-        if len(weather_data_sources) < 2:
-            msg = "São necessárias pelo menos duas fontes válidas para fusão"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        try:
-            # Usar KalmanEnsembleStrategy para fusão
-            # (novo, com histórico PostgreSQL)
-            from backend.core.data_processing.kalman_ensemble import (
-                KalmanEnsembleStrategy,
-            )
-
-            # Preparar medições atuais consolidadas de todas as fontes
-            current_measurements = {}
-
-            # Consolidar dados de todas as fontes
-            # (tomar médias onde disponível)
-            for source_df in weather_data_sources:
-                for col in source_df.columns:
-                    if col not in current_measurements:
-                        current_measurements[col] = []
-                    # Pegar primeira data válida de cada coluna
-                    valid_values = source_df[col].dropna()
-                    if len(valid_values) > 0:
-                        current_measurements[col].append(valid_values.iloc[0])
-
-            # Calcular médias das medições consolidadas
-            for key in current_measurements:
-                if current_measurements[key]:
-                    current_measurements[key] = np.mean(
-                        current_measurements[key]
-                    )
-                else:
-                    current_measurements[key] = np.nan
-
-            # Adicionar metadados necessários para Kalman
-            if (
-                len(weather_data_sources) > 0
-                and not weather_data_sources[0].empty
-                and len(weather_data_sources[0].index) > 0
-            ):
-                first_date = weather_data_sources[0].index[0]
-                current_measurements["date"] = first_date.strftime("%Y-%m-%d")
-                current_measurements["latitude"] = latitude
-                current_measurements["longitude"] = longitude
-            else:
-                # Fallback se não conseguir obter data
-                current_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-                current_measurements["date"] = current_date
-                current_measurements["latitude"] = latitude
-                current_measurements["longitude"] = longitude
-
-            # Executar fusão com KalmanEnsembleStrategy (sync wrapper)
-            kalman_strategy = KalmanEnsembleStrategy(
-                db_session=None, redis_client=None
-            )
-            fused_measurements = kalman_strategy.auto_fuse_sync(
-                latitude=latitude,
-                longitude=longitude,
-                current_measurements=current_measurements,
-            )
-
-            # Converter resultado para DataFrame
-            if fused_measurements:
-                weather_data = pd.DataFrame([fused_measurements])
-                weather_data.index = pd.to_datetime(
-                    [current_measurements["date"]]
-                )
-                logger.info("Fusão Kalman Ensemble concluída com sucesso")
-            else:
-                # Fallback para primeira fonte se Kalman falhar
-                weather_data = weather_data_sources[0]
-                logger.warning("Kalman falhou, usando fonte original")
-
-        except Exception as e:
-            msg = f"Erro na fusão de dados: {str(e)}"
-            logger.error(msg)
-            # Fallback para primeira fonte
-            weather_data = weather_data_sources[0]
-            warnings_list.append(
-                f"Fusão Kalman falhou, usando fonte original: {str(e)}"
-            )
+    # Se múltiplas fontes, concatenar para processamento posterior
+    if len(weather_data_sources) > 1:
+        logger.info(
+            f"Concatenando {len(weather_data_sources)} fontes "
+            f"para processamento"
+        )
+        weather_data = pd.concat(weather_data_sources, axis=0)
+        # Remover duplicatas de datas, mantendo primeira ocorrência
+        weather_data = weather_data[
+            ~weather_data.index.duplicated(keep="first")
+        ]
     else:
-        if not weather_data_sources:
-            msg = "Nenhuma fonte forneceu dados válidos"
-            logger.error(msg)
-            raise ValueError(msg)
         weather_data = weather_data_sources[0]
 
     # Validação final - aceitar todas as variáveis das APIs

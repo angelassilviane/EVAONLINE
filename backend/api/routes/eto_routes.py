@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from loguru import logger
 
 from backend.database.connection import get_db
 from backend.database.models.user_favorites import UserFavorites
@@ -27,6 +28,7 @@ class EToCalculationRequest(BaseModel):
     start_date: str
     end_date: str
     sources: Optional[str] = "auto"
+    period_type: Optional[str] = "dashboard"  # historical, dashboard, forecast
     elevation: Optional[float] = None
     estado: Optional[str] = None
     cidade: Optional[str] = None
@@ -67,45 +69,93 @@ async def calculate_eto(
     - Auto-detecção de melhor fonte
     - Fusão de dados (Kalman)
     - Cache automático
+
+    Modos de operação (period_type):
+    - historical: 1-90 dias (apenas NASA POWER e OpenMeteo Archive)
+    - dashboard: 7-30 dias (todas as APIs disponíveis)
+    - forecast: hoje até hoje+5d (apenas APIs de previsão)
     """
     try:
         from backend.core.eto_calculation.eto_services import (
             EToProcessingService,
         )
-        from backend.api.services.climate_source_selector import (
-            get_available_sources_for_frontend,
-        )
+        from datetime import datetime, timedelta
 
-        # 1. Validar fonte de dados
+        # 0. Validar period_type e período
+        start = datetime.strptime(request.start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(request.end_date, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        period_days = (end - start).days + 1
+        period_type = request.period_type or "dashboard"
+
+        if period_type == "historical":
+            # Histórico: 1-90 dias, apenas NASA e Archive
+            if period_days < 1 or period_days > 90:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Histórico: período deve ser 1-90 dias "
+                        f"(atual: {period_days})"
+                    ),
+                )
+            if end >= today:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Histórico: período deve ser no passado",
+                )
+            # Forçar apenas fontes históricas
+            if request.sources == "auto" or not request.sources:
+                request.sources = "openmeteo_archive,nasa_power"
+
+        elif period_type == "dashboard":
+            # Dashboard: 7-30 dias
+            if period_days < 7 or period_days > 30:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Dashboard: período deve ser 7-30 dias "
+                        f"(atual: {period_days})"
+                    ),
+                )
+
+        elif period_type == "forecast":
+            # Forecast: hoje até hoje+5d
+            if start < today:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Forecast: data inicial deve ser >= hoje",
+                )
+            if end > today + timedelta(days=5):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Forecast: data final deve ser <= hoje + 5 dias",
+                )
+
+        # 1. Auto-seleção de fontes
+        # data_download.py classifica automaticamente como:
+        # - historical (start <= today-30d)
+        # - current (passado recente 7-30 dias)
+        # - forecast (end > today)
         if request.sources == "auto" or not request.sources:
-            # Auto-detectar melhor fonte
-            sources_info = get_available_sources_for_frontend(
-                request.lat, request.lng
+            selected_source = "data fusion"
+            logger.info(
+                f"Auto-seleção ativada: {period_type} em "
+                f"({request.lat}, {request.lng})"
             )
-            selected_source = sources_info["recommended"]
         else:
             selected_source = request.sources
+            logger.info(f"Fontes especificadas: {selected_source}")
 
-        # 2. Mapear fonte para formato esperado pelo serviço
-        source_mapping = {
-            "fusion": "kalman",
-            "openmeteo_forecast": "openmeteo_forecast",
-            "openmeteo_archive": "openmeteo_archive",
-            "nasa_power": "nasa_power",
-            "met_norway": "met_norway",
-            "nws_forecast": "nws_forecast",
-            "nws_stations": "nws_stations",
-        }
-
-        database = source_mapping.get(
-            str(selected_source), "openmeteo_forecast"
-        )
+        # 2. Preparar string de fontes para download
+        database = selected_source
 
         # 3. Obter elevação (se não fornecida)
         elevation = request.elevation
         if elevation is None:
-            # TODO: Buscar elevação via API (Open-Elevation ou similar)
-            elevation = 0.0  # Padrão ao nível do mar
+            logger.info(
+                f"Elevação não fornecida para ({request.lat}, {request.lng}), "
+                f"será obtida via API"
+            )
 
         # 4. Executar cálculo ETo
         service = EToProcessingService(db_session=db)
@@ -139,6 +189,10 @@ async def calculate_eto(
             "timestamp": time.time(),
         }
 
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=400, detail=f"Formato de data inválido: {str(ve)}"
+        )
     except Exception as e:
         import traceback
 

@@ -18,7 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from loguru import logger
 
-from backend.core.eto_calculation.eto_services import EToCalculationService, EToProcessingService
+from backend.core.eto_calculation.eto_services import (
+    EToCalculationService,
+    EToProcessingService,
+)
 from backend.infrastructure.celery.celery_config import celery_app as app
 
 # Configuração do logging
@@ -31,7 +34,12 @@ logger.add(
 )
 
 # Constantes
-MATOPIBA_BOUNDS = {"lat_min": -14.5, "lat_max": -2.5, "lng_min": -50.0, "lng_max": -41.5}
+MATOPIBA_BOUNDS = {
+    "lat_min": -14.5,
+    "lat_max": -2.5,
+    "lng_min": -50.0,
+    "lng_max": -41.5,
+}
 
 
 # ============================================================================
@@ -65,7 +73,9 @@ def calculate_eto(
             measurements = row.to_dict()
             measurements["latitude"] = latitude
             measurements["longitude"] = 0  # Padrão para compatibilidade
-            measurements["date"] = str(idx.date()) if hasattr(idx, "date") else str(idx)
+            measurements["date"] = (
+                str(idx.date()) if hasattr(idx, "date") else str(idx)
+            )
             measurements["elevation_m"] = elevation
 
             result = service.calculate_et0(measurements)
@@ -93,7 +103,10 @@ def calculate_eto(
         raise
 
 
-@app.task(bind=True, name="backend.core.eto_calculation.eto_calculation.calculate_eto_pipeline")
+@app.task(
+    bind=True,
+    name="backend.core.eto_calculation.eto_calculation.calculate_eto_pipeline",
+)
 async def calculate_eto_pipeline(
     self,
     lat: float,
@@ -149,7 +162,9 @@ async def calculate_eto_pipeline(
         amanha = hoje + timedelta(days=1)
 
         if start < um_ano_atras:
-            raise ValueError("Data inicial não pode ser anterior a 1 ano atrás")
+            raise ValueError(
+                "Data inicial não pode ser anterior a 1 ano atrás"
+            )
         if end > amanha:
             raise ValueError("Data final não pode ser posterior a amanhã")
         if end < start:
@@ -163,12 +178,18 @@ async def calculate_eto_pipeline(
         is_matopiba = database == "openmeteo_forecast"
         if is_matopiba:
             if not (estado and cidade):
-                raise ValueError("Estado e cidade são obrigatórios para o modo MATOPIBA")
+                raise ValueError(
+                    "Estado e cidade são obrigatórios para o modo MATOPIBA"
+                )
             if not (
                 MATOPIBA_BOUNDS["lat_min"] <= lat <= MATOPIBA_BOUNDS["lat_max"]
-                and MATOPIBA_BOUNDS["lng_min"] <= lng <= MATOPIBA_BOUNDS["lng_max"]
+                and MATOPIBA_BOUNDS["lng_min"]
+                <= lng
+                <= MATOPIBA_BOUNDS["lng_max"]
             ):
-                warnings.append("Coordenadas fora da região típica do MATOPIBA")
+                warnings.append(
+                    "Coordenadas fora da região típica do MATOPIBA"
+                )
 
         # Usar EToProcessingService para orquestração
         service = EToProcessingService()
@@ -192,5 +213,4 @@ async def calculate_eto_pipeline(
         msg = f"Erro no pipeline de ETo: {str(e)}"
         warnings.append(msg)
         logger.error(msg)
-        return {}, warnings
         return {}, warnings

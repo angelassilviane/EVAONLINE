@@ -5,7 +5,8 @@ API: https://api.open-meteo.com/v1/forecast
 
 Cobertura: Global
 
-Período: (hoje - 30 dias) até (hoje + 5 dias)
+Período: (hoje - 25 dias) até (hoje + 5 dias)
+Total: 30 dias (25 passado + 5 futuro)
 
 Resolução: Diária (agregada de dados horários)
 
@@ -48,8 +49,8 @@ class OpenMeteoForecastConfig:
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
     # Timeline constraints
-    MAX_PAST_DAYS = 30  # Can go back 30 days
-    MAX_FUTURE_DAYS = 5  # Padronizado para 5 dias (forecast)
+    MAX_PAST_DAYS = 25  # Pode voltar até 25 dias (hoje - 25d)
+    MAX_FUTURE_DAYS = 5  # Pode prever até 5 dias (hoje + 5d)
 
     # Cache TTL (dados atualizam diariamente)
     CACHE_TTL = 3600 * 6  # 6 hours
@@ -129,6 +130,27 @@ class OpenMeteoForecastClient:
         # 1. Validate inputs
         self._validate_inputs(lat, lng, start_date, end_date)
 
+        # Ajustar datas para limites da API
+        from datetime import datetime, timedelta
+
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        today = datetime.now().date()
+
+        # Forecast API: (hoje - 25d) até (hoje + 5d)
+        min_date = today - timedelta(days=25)
+        max_date = today + timedelta(days=5)
+
+        if start_dt.date() < min_date:
+            logger.warning(
+                f"Ajustando start_date de {start_date} para {min_date}"
+            )
+            start_date = min_date.isoformat()
+
+        if end_dt.date() > max_date:
+            logger.warning(f"Ajustando end_date de {end_date} para {max_date}")
+            end_date = max_date.isoformat()
+
         # 2. Try Redis cache first (if available)
         if self.cache:
             cache_key = self._get_cache_key(lat, lng, start_date, end_date)
@@ -137,16 +159,39 @@ class OpenMeteoForecastClient:
             if cached_data:
                 logger.info(
                     f"✅ Cache HIT (Redis): OpenMeteo Forecast "
-                    f"({lat:.4f}, {lng:.4f})"
+                    f"({lat:.4f}, {lng:.4f}) - {len(cached_data.get('climate_data', {}).get('dates', []))} days cached"
                 )
                 return cached_data
 
         # 3. Prepare API parameters
+        # OpenMeteo Forecast API: usa past_days e forecast_days
+        from datetime import datetime, timedelta
+
+        # Recalcular datas após ajustes
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        today_date = datetime.now().date()
+
+        # Calcular past_days e forecast_days
+        if start_dt.date() <= today_date:
+            past_days = (today_date - start_dt.date()).days
+        else:
+            past_days = 0
+
+        if end_dt.date() >= today_date:
+            forecast_days = (end_dt.date() - today_date).days + 1
+        else:
+            forecast_days = 0
+
+        # Limites da API (corrigidos conforme documentação)
+        past_days = min(past_days, 25)
+        forecast_days = min(forecast_days, 5)
+
         params = {
             "latitude": lat,
             "longitude": lng,
-            "start_date": start_date,
-            "end_date": end_date,
+            "past_days": past_days,
+            "forecast_days": forecast_days,
             "daily": self.config.DAILY_VARIABLES,
             "models": "best_match",
             "timezone": "auto",
@@ -154,9 +199,14 @@ class OpenMeteoForecastClient:
         }
 
         logger.info(
-            f"⚠️ Cache MISS: Forecast API {start_date} to {end_date} | "
-            f"({lat:.4f}, {lng:.4f})"
+            f"⚠️ Cache MISS: Forecast API past_days={past_days}, "
+            f"forecast_days={forecast_days} | ({lat:.4f}, {lng:.4f})"
         )
+        logger.info(
+            f"Requested: {start_date} to {end_date} → "
+            f"API params: past_days={past_days}, forecast_days={forecast_days}"
+        )
+        logger.info(f"Full API params: {params}")
 
         # 4. Fetch data from Forecast API
         try:
@@ -179,12 +229,26 @@ class OpenMeteoForecastClient:
             daily = response.Daily()
             # Handle scalar (single day) vs array timestamps
             time_data = daily.Time()  # type: ignore
+
+            logger.debug(f"Raw time_data type: {type(time_data)}")
+            logger.debug(f"Raw time_data value: {time_data}")
+            logger.debug(f"Has tolist: {hasattr(time_data, 'tolist')}")
+
             if hasattr(time_data, "tolist"):
                 timestamps = time_data.tolist()  # type: ignore
             else:
                 timestamps = [int(time_data)]
 
+            logger.debug(f"Timestamps extracted: {len(timestamps)} items")
+            logger.debug(f"First 3 timestamps: {timestamps[:3]}")
+
             dates = [datetime.fromtimestamp(ts) for ts in timestamps]
+
+            logger.info(
+                f"✅ API returned {len(dates)} days: "
+                f"{dates[0].date()} to {dates[-1].date()} | "
+                f"Elevation: {location['elevation']}m"
+            )
 
             climate_data = {"dates": dates}
 
@@ -338,7 +402,7 @@ class OpenMeteoForecastClient:
         if start.date() < min_date:
             msg = (
                 f"Forecast API: start_date must be >= {min_date} "
-                f"(hoje - 30 dias). Use Archive API para dados "
+                f"(hoje - 25 dias). Use Archive API para dados "
                 f"mais antigos."
             )
             raise ValueError(msg)
@@ -346,7 +410,7 @@ class OpenMeteoForecastClient:
         if end.date() > max_date:
             msg = (
                 f"Forecast API: end_date must be <= {max_date} "
-                f"(hoje + 5 dias - padronizado)"
+                f"(hoje + 5 dias)"
             )
             raise ValueError(msg)
 

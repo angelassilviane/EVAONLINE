@@ -62,7 +62,9 @@ class SimpleKalmanFilter:
             measurement_variance=measurement_variance,
         )
 
-    def update(self, measurement: float, timestamp: Optional[datetime] = None) -> float:
+    def update(
+        self, measurement: float, timestamp: Optional[datetime] = None
+    ) -> float:
         """
         Atualiza o filtro com uma nova medição
 
@@ -74,7 +76,9 @@ class SimpleKalmanFilter:
             measurement: Valor medido (pode ser NaN)
             timestamp: Timestamp opcional da medição
         """
-        if not isinstance(measurement, (int, float, type(None))) and not pd.isna(measurement):
+        if not isinstance(
+            measurement, (int, float, type(None))
+        ) and not pd.isna(measurement):
             raise TypeError("measurement must be a number or NaN")
 
         current_time = timestamp or datetime.now()
@@ -87,7 +91,9 @@ class SimpleKalmanFilter:
 
         # Predição: usar estimativa anterior
         priori_estimate = self.state.posterior_estimate
-        priori_error_estimate = self.state.posterior_error_estimate + self.state.process_variance
+        priori_error_estimate = (
+            self.state.posterior_error_estimate + self.state.process_variance
+        )
 
         # Atualização (Correção): combinar predição com medição
         kalman_gain = priori_error_estimate / (
@@ -98,7 +104,9 @@ class SimpleKalmanFilter:
             measurement - priori_estimate
         )
 
-        self.state.posterior_error_estimate = (1 - kalman_gain) * priori_error_estimate
+        self.state.posterior_error_estimate = (
+            1 - kalman_gain
+        ) * priori_error_estimate
 
         # Guardar histórico
         self.state.history.append(self.state.posterior_estimate)
@@ -176,7 +184,9 @@ class AdaptiveKalmanFilter:
             weight: Peso da medição (para múltiplas estações)
             timestamp: Timestamp opcional da medição
         """
-        if not isinstance(measurement, (int, float, type(None))) and not pd.isna(measurement):
+        if not isinstance(
+            measurement, (int, float, type(None))
+        ) and not pd.isna(measurement):
             raise TypeError("measurement must be a number or NaN")
         if weight <= 0:
             raise ValueError("weight must be positive")
@@ -191,7 +201,9 @@ class AdaptiveKalmanFilter:
 
         # Predição
         priori_estimate = self.state.posterior_estimate
-        priori_error_estimate = self.state.posterior_error_estimate + self.state.process_variance
+        priori_error_estimate = (
+            self.state.posterior_error_estimate + self.state.process_variance
+        )
 
         # Ganho de Kalman (adaptativo)
         kalman_gain = priori_error_estimate / (
@@ -203,7 +215,9 @@ class AdaptiveKalmanFilter:
             measurement - priori_estimate
         )
 
-        self.state.posterior_error_estimate = (1 - kalman_gain) * priori_error_estimate
+        self.state.posterior_error_estimate = (
+            1 - kalman_gain
+        ) * priori_error_estimate
 
         self.state.history.append(self.state.posterior_estimate)
         self.state.timestamps.append(current_time)
@@ -216,8 +230,10 @@ class AdaptiveKalmanFilter:
             "estimate": self.state.posterior_estimate,
             "error_estimate": self.state.posterior_error_estimate,
             "confidence_interval_95": (
-                self.state.posterior_estimate - 1.96 * self.state.posterior_error_estimate,
-                self.state.posterior_estimate + 1.96 * self.state.posterior_error_estimate,
+                self.state.posterior_estimate
+                - 1.96 * self.state.posterior_error_estimate,
+                self.state.posterior_estimate
+                + 1.96 * self.state.posterior_error_estimate,
             ),
             "history_length": len(self.state.history),
             "monthly_normal": self.monthly_normal,
@@ -250,17 +266,23 @@ class ClimateKalmanFusion:
         - Estações remotas
         """
         self.fusion_strategy = "simple"
-        fused_data = {}
+        # Copiar todas as variáveis originais
+        fused_data = current_measurements.copy()
 
         for variable, value in current_measurements.items():
             if value is None or pd.isna(value):
-                fused_data[variable] = None
                 fused_data[f"{variable}_quality"] = "missing"
+                continue
+
+            # Pular variáveis não numéricas
+            if not isinstance(value, (int, float)):
                 continue
 
             # Criar filtro se não existir
             if variable not in self.filters:
-                measurement_variance = 0.5 - (station_confidence * 0.4)  # 0.1 a 0.5
+                measurement_variance = 0.5 - (
+                    station_confidence * 0.4
+                )  # 0.1 a 0.5
                 self.filters[variable] = SimpleKalmanFilter(
                     measurement_variance=measurement_variance
                 )
@@ -294,15 +316,19 @@ class ClimateKalmanFusion:
         - Análise de anomalias
         """
         self.fusion_strategy = "adaptive"
-        fused_data = {}
+        # Copiar todas as variáveis originais
+        fused_data = current_measurements.copy()
 
         if station_weights is None:
             station_weights = dict.fromkeys(current_measurements.keys(), 1.0)
 
         for variable, value in current_measurements.items():
             if value is None or pd.isna(value):
-                fused_data[variable] = None
                 fused_data[f"{variable}_quality"] = "missing"
+                continue
+
+            # Pular variáveis não numéricas
+            if not isinstance(value, (int, float)):
                 continue
 
             normal = monthly_normals.get(variable, 0.0)
@@ -322,7 +348,9 @@ class ClimateKalmanFusion:
 
             # Aplicar filtro com peso
             weight = station_weights.get(variable, 1.0)
-            filtered_value = self.filters[variable].update(value, weight=weight)
+            filtered_value = self.filters[variable].update(
+                value, weight=weight
+            )
 
             fused_data[variable] = filtered_value
             fused_data[f"{variable}_raw"] = value
@@ -365,7 +393,9 @@ class ClimateKalmanFusion:
         total_weight = sum(distance_weights)
         distance_weights = [w / total_weight for w in distance_weights]
 
-        logger.debug(f"Fusing {n_stations} stations with weights: {distance_weights}")
+        logger.debug(
+            f"Fusing {n_stations} stations with weights: {distance_weights}"
+        )
 
         for station_idx, station in enumerate(stations_data):
             weight = distance_weights[station_idx]
@@ -391,28 +421,39 @@ class ClimateKalmanFusion:
 
                 if variable not in self.filters:
                     normal = monthly_normals.get(variable, 0.0)
-                    std = historical_stds.get(variable, 1.0) if historical_stds else 1.0
+                    std = (
+                        historical_stds.get(variable, 1.0)
+                        if historical_stds
+                        else 1.0
+                    )
                     self.filters[variable] = AdaptiveKalmanFilter(
                         monthly_normal=normal,
                         historical_std=std,
                         station_confidence=min(n_stations * 0.3, 0.95),
                     )
 
-                fused_value = self.filters[variable].update(weighted_estimates[variable])
+                fused_value = self.filters[variable].update(
+                    weighted_estimates[variable]
+                )
                 fused_result[variable] = fused_value
         else:
             for variable in weighted_estimates:
                 if variable not in self.filters:
                     self.filters[variable] = SimpleKalmanFilter()
 
-                fused_value = self.filters[variable].update(weighted_estimates[variable])
+                fused_value = self.filters[variable].update(
+                    weighted_estimates[variable]
+                )
                 fused_result[variable] = fused_value
 
         return fused_result
 
     def get_all_states(self) -> Dict[str, Dict[str, Any]]:
         """Retorna estado de todos os filtros"""
-        return {var: filter_obj.get_state() for var, filter_obj in self.filters.items()}
+        return {
+            var: filter_obj.get_state()
+            for var, filter_obj in self.filters.items()
+        }
 
     def reset(self, variable: Optional[str] = None):
         """Reset de um filtro ou de todos"""
@@ -421,7 +462,9 @@ class ClimateKalmanFusion:
                 del self.filters[variable]
         else:
             self.filters.clear()
-        logger.info(f"Kalman filters reset: {'all' if variable is None else variable}")
+        logger.info(
+            f"Kalman filters reset: {'all' if variable is None else variable}"
+        )
 
 
 class KalmanEnsembleStrategy:
@@ -438,7 +481,9 @@ class KalmanEnsembleStrategy:
 
         # Importar aqui para evitar circular imports
         if db_session:
-            from backend.core.data_processing.station_finder import StationFinder
+            from backend.core.data_processing.station_finder import (
+                StationFinder,
+            )
 
             self.station_finder = StationFinder(db_session)
         else:
@@ -474,8 +519,8 @@ class KalmanEnsembleStrategy:
         logger.info(f"Auto fusion for ({latitude:.4f}, {longitude:.4f})")
 
         # 1️⃣ Buscar histórico do PostgreSQL
-        has_history, monthly_normals, historical_stds = await self._get_historical_data(
-            latitude, longitude
+        has_history, monthly_normals, historical_stds = (
+            await self._get_historical_data(latitude, longitude)
         )
 
         # 2️⃣ Decidir estratégia
@@ -554,7 +599,9 @@ class KalmanEnsembleStrategy:
             return False, {}, {}
 
         try:
-            logger.debug(f"🔍 Buscando histórico no PostgreSQL: ({latitude:.4f}, {longitude:.4f})")
+            logger.debug(
+                f"🔍 Buscando histórico no PostgreSQL: ({latitude:.4f}, {longitude:.4f})"
+            )
 
             city_data = await self.station_finder.find_studied_city(
                 target_lat=latitude,
@@ -578,7 +625,9 @@ class KalmanEnsembleStrategy:
             historical_stds = self._extract_historical_stds(city_data)
 
             if not monthly_normals or not historical_stds:
-                logger.warning(f"Incomplete historical data for {city_data.get('city_name')}")
+                logger.warning(
+                    f"Incomplete historical data for {city_data.get('city_name')}"
+                )
                 return False, {}, {}
 
             # 4️⃣ Cachear em Redis (24h)
@@ -592,7 +641,9 @@ class KalmanEnsembleStrategy:
                         "distance_km": city_data.get("distance_km"),
                         "timestamp": datetime.now().isoformat(),
                     }
-                    self.redis.setex(cache_key, 86400, json.dumps(cache_data))  # 24 horas
+                    self.redis.setex(
+                        cache_key, 86400, json.dumps(cache_data)
+                    )  # 24 horas
                     logger.debug(f"💾 Cached: {cache_key}")
                 except Exception as e:
                     logger.warning(f"Failed to cache in Redis: {e}")
@@ -603,7 +654,9 @@ class KalmanEnsembleStrategy:
             logger.error(f"❌ Error getting historical data: {e}")
             return False, {}, {}
 
-    def _extract_monthly_normals(self, city_data: Dict) -> Dict[int, Dict[str, float]]:
+    def _extract_monthly_normals(
+        self, city_data: Dict
+    ) -> Dict[int, Dict[str, float]]:
         """
         Extrai normais mensais do city_data.
 
@@ -636,7 +689,9 @@ class KalmanEnsembleStrategy:
 
         return monthly_normals
 
-    def _extract_historical_stds(self, city_data: Dict) -> Dict[int, Dict[str, float]]:
+    def _extract_historical_stds(
+        self, city_data: Dict
+    ) -> Dict[int, Dict[str, float]]:
         """
         Extrai desvios padrão históricos do city_data.
 

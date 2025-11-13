@@ -23,9 +23,12 @@ class ClimateValidationService:
     LAT_MIN, LAT_MAX = -90.0, 90.0
     LON_MIN, LON_MAX = -180.0, 180.0
 
-    # Limites de período da aplicação EVA
-    MIN_PERIOD_DAYS = 7  # Mínimo de 7 dias (todas as operações)
-    MAX_PERIOD_DAYS = 30  # Máximo de 30 dias (interface web)
+    # NOTA: Limites de período NÃO são validados aqui
+    # Cada API tem seus próprios limites em climate_source_availability.py:
+    # - Histórico web: 7-30 dias (NASA, Open-Meteo Archive)
+    # - Histórico email: 7-90 dias (NASA, Open-Meteo Archive)
+    # - Previsão: até 5 dias (Open-Meteo Forecast, MET Norway, NWS)
+    # - Realtime: até 1 dia (NWS Stations)
 
     # Variáveis válidas (padronizadas para todas as APIs)
     VALID_CLIMATE_VARIABLES = {
@@ -124,7 +127,10 @@ class ClimateValidationService:
         start_date: str, end_date: str, allow_future: bool = False
     ) -> tuple[bool, dict[str, Any]]:
         """
-        Valida intervalo de datas.
+        Valida FORMATO de datas apenas.
+
+        NOTA: NÃO valida período (min/max dias).
+        Cada API tem limites próprios em climate_source_availability.py.
 
         Args:
             start_date: Data inicial (YYYY-MM-DD)
@@ -143,6 +149,7 @@ class ClimateValidationService:
         errors = []
         today = datetime.now().date()
 
+        # Validações básicas
         if start > end:
             errors.append(f"Start date {start} > end date {end}")
 
@@ -152,27 +159,14 @@ class ClimateValidationService:
             if end > today:
                 errors.append(f"End date {end} is in the future")
 
-        # Verificar período EVAonline: mínimo 7 dias, máximo 30 dias
-        period_days = (end - start).days + 1  # +1 para incluir ambos os dias
-        min_days = ClimateValidationService.MIN_PERIOD_DAYS
-        max_days = ClimateValidationService.MAX_PERIOD_DAYS
-
-        if period_days < min_days:
-            errors.append(
-                f"Period too short: {period_days} days "
-                f"(minimum {min_days} days required)"
-            )
-
-        if period_days > max_days:
-            errors.append(
-                f"Period too long: {period_days} days "
-                f"(maximum {max_days} days allowed)"
-            )
+        # ✅ REMOVIDO: validação de período (min/max dias)
+        # Cada API valida seu próprio período permitido
 
         if errors:
             logger.warning(f"Date range validation failed: {errors}")
             return False, {"errors": errors}
 
+        period_days = (end - start).days + 1
         logger.debug(
             f"Date range validated: {start} to {end} ({period_days} days)"
         )

@@ -176,10 +176,10 @@ class StationFinder:
                 id,
                 city_name,
                 country,
-                state_province,
+                state,
                 latitude,
                 longitude,
-                elevation_m,
+                elevation,
                 timezone,
                 data_sources,
                 reference_periods,
@@ -218,7 +218,9 @@ class StationFinder:
             city_name = result[1]
             distance_km = result[10]
 
-            logger.info(f"Found studied city '{city_name}' at distance {distance_km:.2f}km")
+            logger.info(
+                f"Found studied city '{city_name}' at distance {distance_km:.2f}km"
+            )
 
             # 2 Buscar todos os normais mensais desta cidade
             normals_query = text(
@@ -242,7 +244,9 @@ class StationFinder:
             """
             )
 
-            normals_result = self.db_session.execute(normals_query, {"city_id": city_id}).fetchall()
+            normals_result = self.db_session.execute(
+                normals_query, {"city_id": city_id}
+            ).fetchall()
 
             # Agrupar por mês (usar o período mais recente)
             monthly_data = {}
@@ -271,7 +275,7 @@ class StationFinder:
                 "id": city_id,
                 "city_name": city_name,
                 "country": result[2],
-                "state_province": result[3],
+                "state": result[3],
                 "latitude": result[4],
                 "longitude": result[5],
                 "elevation_m": result[6],
@@ -282,7 +286,9 @@ class StationFinder:
                 "monthly_data": monthly_data,
             }
 
-            logger.info(f" Loaded {len(monthly_data)} months of historical data for {city_name}")
+            logger.info(
+                f" Loaded {len(monthly_data)} months of historical data for {city_name}"
+            )
             return city_data
 
         except Exception as e:
@@ -386,7 +392,9 @@ class StationFinder:
             Dict com dados ponderados
         """
         if stations_data is None:
-            stations_data = await self.find_stations_in_radius(target_lat, target_lon, radius_km)
+            stations_data = await self.find_stations_in_radius(
+                target_lat, target_lon, radius_km
+            )
 
         if not stations_data:
             logger.warning("No stations available for weighting")
@@ -472,7 +480,9 @@ class StationFinder:
             """
             )
 
-            result = self.db_session.execute(query, {"city_id": city_id, "limit": limit})
+            result = self.db_session.execute(
+                query, {"city_id": city_id, "limit": limit}
+            )
 
             stations = []
             for row in result:
@@ -493,7 +503,9 @@ class StationFinder:
                     }
                 )
 
-            logger.info(f"Found {len(stations)} nearby stations for city {city_id}")
+            logger.info(
+                f"Found {len(stations)} nearby stations for city {city_id}"
+            )
             return stations
 
         except Exception as e:
@@ -529,7 +541,9 @@ class StationFinder:
 
         try:
             # Tentar executar diretamente com asyncio.run
-            return asyncio.run(self.find_studied_city(target_lat, target_lon, max_distance_km))
+            return asyncio.run(
+                self.find_studied_city(target_lat, target_lon, max_distance_km)
+            )
         except RuntimeError as e:
             if "already running" in str(e):
                 # Se já há event loop rodando, criar nova task
@@ -537,7 +551,10 @@ class StationFinder:
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
-                        asyncio.run, self.find_studied_city(target_lat, target_lon, max_distance_km)
+                        asyncio.run,
+                        self.find_studied_city(
+                            target_lat, target_lon, max_distance_km
+                        ),
                     )
                     return future.result()
             else:
@@ -574,7 +591,9 @@ class StationFinder:
         try:
             # Tentar executar diretamente com asyncio.run
             return asyncio.run(
-                self.find_stations_in_radius(target_lat, target_lon, radius_km, limit)
+                self.find_stations_in_radius(
+                    target_lat, target_lon, radius_km, limit
+                )
             )
         except RuntimeError as e:
             if "already running" in str(e):
@@ -584,7 +603,9 @@ class StationFinder:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
                         asyncio.run,
-                        self.find_stations_in_radius(target_lat, target_lon, radius_km, limit),
+                        self.find_stations_in_radius(
+                            target_lat, target_lon, radius_km, limit
+                        ),
                     )
                     return future.result()
             else:

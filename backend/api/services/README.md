@@ -163,11 +163,12 @@ This document describes the technical specifications of the six public weather A
 ### Open-Meteo Forecast API
 
 - **Endpoint**: https://api.open-meteo.com/v1/forecast
-- **Documentation**: Same as Open-Meteo Archive
+- **Documentation**: https://open-meteo.com/en/docs
+- **Source Code**: https://github.com/open-meteo/open-meteo (AGPLv3)
 - **License**: CC BY 4.0 + AGPLv3
 - **Coverage**: Global
 - **Resolution**: Daily
-- **Period**: (today - 25 days) to (today + 5 days)
+- **Period**: (today - 25 days) to (today + 5 days) = 30 days total
 
 #### Variables
 Identical to Open-Meteo Archive
