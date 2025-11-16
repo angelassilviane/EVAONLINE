@@ -5,7 +5,7 @@ API: https://archive-api.open-meteo.com/v1/archive
 
 Cobertura: Global
 
-Período: 1940-01-01 até (hoje - 2 dias)
+Período: 1990-01-01 até (hoje - 2 dias)
 
 Resolução: Diária (agregada de dados horários)
 
@@ -17,12 +17,12 @@ Public Licence Version 3 AGPLv3 or any later version.
 GitHub Open-Meteo: https://github.com/open-meteo/open-meteo
 
 Variables (10):
-- Temperature: max, mean, min (°C)
-- Relative Humidity: max, mean, min (%)
-- Wind Speed: mean at 10m (m/s)
-- Shortwave Radiation: sum (MJ/m²)
+- Temperature: mean, max, min (°C)
 - Precipitation: sum (mm)
 - ET0 FAO Evapotranspiration (mm)
+- Shortwave Radiation: sum (MJ/m²)
+- Relative Humidity: mean, max, min (%)
+- Wind Speed: mean at 10m (m/s)
 
 CACHE STRATEGY (Nov 2025):
 - Redis cache via ClimateCache (recomendado)
@@ -39,6 +39,7 @@ from loguru import logger
 from retry_requests import retry
 
 from backend.api.services.geographic_utils import GeographicUtils
+from backend.api.services.weather_utils import WeatherConversionUtils
 
 
 class OpenMeteoArchiveConfig:
@@ -50,9 +51,9 @@ class OpenMeteoArchiveConfig:
     # IMPORTANT: Timeline constraints (MIN_DATE, MAX_DATE_OFFSET)
     # are defined in climate_source_availability.py (SOURCE OF TRUTH).
     # This client ASSUMES pre-validated dates from climate_validation.py.
-    # - MIN_DATE: 1940-01-01 (in climate_source_availability.py)
+    # - MIN_DATE: 1990-01-01 (in climate_source_availability.py)
     # - MAX_DATE: hoje - 2d (in climate_source_availability.py)
-    MIN_DATE = datetime(1940, 1, 1)
+    MIN_DATE = datetime(1990, 1, 1)
     MAX_DATE_OFFSET = 2  # hoje - 2d
 
     # Cache TTL (dados históricos são estáveis)
@@ -60,16 +61,16 @@ class OpenMeteoArchiveConfig:
 
     # 10 Climate variables
     DAILY_VARIABLES = [
-        "temperature_2m_max",
         "temperature_2m_mean",
+        "temperature_2m_max",
         "temperature_2m_min",
-        "relative_humidity_2m_max",
-        "relative_humidity_2m_mean",
-        "relative_humidity_2m_min",
-        "wind_speed_10m_mean",
-        "shortwave_radiation_sum",
         "precipitation_sum",
         "et0_fao_evapotranspiration",
+        "shortwave_radiation_sum",
+        "relative_humidity_2m_mean",
+        "relative_humidity_2m_max",
+        "relative_humidity_2m_min",
+        "wind_speed_10m_mean",
     ]
 
     # Network settings
@@ -100,7 +101,7 @@ class OpenMeteoArchiveClient:
         cache_type = "Redis" if cache else "Local"
         logger.info(
             f"OpenMeteoArchiveClient initialized ({cache_type} cache, "
-            f"1940-2023)"
+            f"1990-present)"
         )
 
     def _setup_client(self, cache_dir: str):
@@ -128,7 +129,7 @@ class OpenMeteoArchiveClient:
 
         IMPORTANTE: Este cliente ASSUME que:
         - Coordenadas validadas em climate_validation.py
-        - Period (1940-01-01 até hoje-2d) validado em
+        - Period (1990-01-01 até hoje-2d) validado em
           climate_source_availability.py
         Este cliente APENAS busca dados, sem re-validar datas.
 
@@ -138,7 +139,7 @@ class OpenMeteoArchiveClient:
         Args:
             lat: Latitude (-90 to 90)
             lng: Longitude (-180 to 180)
-            start_date: Start date (YYYY-MM-DD, >= 1940-01-01)
+            start_date: Start date (YYYY-MM-DD, >= 1990-01-01)
             end_date: End date (YYYY-MM-DD, <= hoje - 2 dias)
         """
         # 1. Validate inputs
@@ -221,7 +222,7 @@ class OpenMeteoArchiveClient:
             if "wind_speed_10m_mean" in climate_data:
                 wind_10m = climate_data["wind_speed_10m_mean"]  # type: ignore
                 wind_2m = [
-                    self.convert_wind_10m_to_2m(w) if w is not None else None  # type: ignore  # noqa: E501
+                    WeatherConversionUtils.convert_wind_10m_to_2m(w) if w is not None else None  # type: ignore  # noqa: E501
                     for w in wind_10m  # type: ignore
                 ]
                 climate_data["wind_speed_2m_mean"] = wind_2m  # type: ignore
@@ -260,28 +261,6 @@ class OpenMeteoArchiveClient:
         except Exception as e:
             logger.error(f"Archive API error: {str(e)}")
             raise
-
-    @staticmethod
-    def convert_wind_10m_to_2m(wind_10m: float | None) -> float | None:
-        """
-        Converte velocidade do vento de 10m para 2m usando perfil logarítmico.
-
-        Fórmula FAO-56 (Allen et al., 1998):
-        u2 = uz × (4.87) / ln(67.8 × z - 5.42)
-
-        Para z=10m: u2 ≈ u10 × 0.748
-
-        Referência: FAO Irrigation and Drainage Paper 56, Chapter 3, Eq 47
-
-        Args:
-            wind_10m: Velocidade do vento a 10m (m/s)
-
-        Returns:
-            Velocidade do vento a 2m (m/s) ou None
-        """
-        if wind_10m is None:
-            return None
-        return wind_10m * 0.748
 
     def _get_cache_key(
         self, lat: float, lng: float, start_date: str, end_date: str
@@ -341,6 +320,12 @@ class OpenMeteoArchiveClient:
             )
             raise ValueError(msg)
 
+    async def close(self) -> None:
+        """
+        Close client resources (no-op for this client).
+        """
+        pass
+
     @staticmethod
     def get_info() -> Dict[str, Any]:
         """
@@ -354,7 +339,7 @@ class OpenMeteoArchiveClient:
             "api": "Open-Meteo Archive",
             "url": "https://archive-api.open-meteo.com/v1/archive",
             "coverage": "Global",
-            "period": f"1940-01-01 até {max_date.date()}",
+            "period": f"Padrão EVAonline: 1990-01-01 até {max_date.date()}",
             "resolution": "Diária (agregada de horária)",
             "license": "CC BY 4.0",
             "attribution": "Weather data by Open-Meteo.com (CC BY 4.0)",

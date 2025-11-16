@@ -1201,8 +1201,10 @@ class EToProcessingService:
                 combined_data.set_index("date", inplace=True)
 
             # 3. Preprocessing (normalização, outlier detection)
+            # Detectar região baseada na latitude (Brasil: -35 a 5 lat)
+            region = "brazil" if -35 <= latitude <= 5 else "global"
             combined_data, preprocessing_warnings = preprocessing(
-                combined_data, latitude
+                combined_data, latitude, region=region
             )
             fusion_warnings.extend(preprocessing_warnings)
 

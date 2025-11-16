@@ -61,14 +61,14 @@ class ClimateSourceAvailability:
         },
         "openmeteo_archive": {
             "type": "historical",
-            "start_date": HISTORICAL_START_DATE,  # Referência centralizada
-            "end_date_offset": -2,  # hoje-2d
+            "start_date": HISTORICAL_START_DATE,  # 1990-01-01
+            "end_date_offset": -30,  # hoje-30d (HISTORICAL_EMAIL)
             "coverage": "global",
         },
         # Previsão/Recent
         "openmeteo_forecast": {
             "type": "forecast",
-            "start_date_offset": -30,  # hoje-30d
+            "start_date_offset": -1,  # hoje-1d (DASHBOARD_FORECAST)
             "end_date_offset": +5,  # hoje+5d
             "coverage": "global",
         },

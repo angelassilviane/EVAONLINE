@@ -135,10 +135,10 @@ class ClimateClientFactory:
         cache_dir: str = ".cache/openmeteo_archive",
     ):
         """
-        Cria cliente Open-Meteo Archive com cache local.
+        Cria cliente Open-Meteo Archive com cache Redis.
 
         Args:
-            cache_dir: Diretório para cache em disco
+            cache_dir: Diretório para cache em disco (fallback)
 
         Returns:
             Cliente para dados históricos (1940–hoje-2d)
@@ -147,9 +147,12 @@ class ClimateClientFactory:
             OpenMeteoArchiveClient,
         )
 
-        client = OpenMeteoArchiveClient(cache_dir=cache_dir)
+        client = OpenMeteoArchiveClient(
+            cache=get_climate_cache_service(), cache_dir=cache_dir
+        )
         logger.debug(
-            "OpenMeteoArchiveClient criado (cache local: {})", cache_dir
+            "OpenMeteoArchiveClient criado com cache Redis + local: {}",
+            cache_dir,
         )
         return client
 

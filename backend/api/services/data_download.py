@@ -254,16 +254,17 @@ async def download_weather_data(
 
             elif source == "openmeteo_archive":
                 # Open-Meteo Archive (histórico desde 1950)
-                client = ClimateClientFactory.create_openmeteo_archive()
-                try:
-                    openmeteo_data = await client.get_daily_data(
-                        lat=latitude,
-                        lon=longitude,
-                        start_date=data_inicial_formatted,
-                        end_date=data_final_adjusted,
-                    )
-                finally:
-                    await client.close()
+                from backend.api.services.openmeteo_archive.openmeteo_archive_sync_adapter import (
+                    OpenMeteoArchiveSyncAdapter,
+                )
+
+                client = OpenMeteoArchiveSyncAdapter()
+                openmeteo_data = client.get_daily_data_sync(
+                    lat=latitude,
+                    lon=longitude,
+                    start_date=data_inicial_formatted,
+                    end_date=data_final_adjusted,
+                )
 
                 if not openmeteo_data:
                     msg = (

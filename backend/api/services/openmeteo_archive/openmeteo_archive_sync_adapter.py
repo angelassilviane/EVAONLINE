@@ -6,7 +6,7 @@ para compatibilidade com Celery tasks.
 
 API: https://archive-api.open-meteo.com/v1/archive
 Cobertura: Global
-Período: 1940-01-01 até (hoje - 2 dias)
+Período: 1940-01-01 até hoje-30 dias (modo historical_email)
 Licença: CC BY 4.0 (atribuição obrigatória)
 
 Variables (10):
@@ -39,7 +39,7 @@ class OpenMeteoArchiveSyncAdapter:
     """
     Adapter síncrono para Open-Meteo Archive API.
 
-    Historical data: 1940-01-01 até (hoje - 2 dias)
+    Historical data: 1940-01-01 até hoje-30 dias (modo historical_email)
     Models: best_match (melhor modelo disponível)
     Variables: 10 variáveis climáticas (T, RH, Wind, Solar, Precip, ET0)
     Wind unit: m/s (metros por segundo)
@@ -55,7 +55,7 @@ class OpenMeteoArchiveSyncAdapter:
             cache_dir: Diretório para fallback cache (TTL: 24h)
 
         Features:
-            - Historical data: 1940 até hoje-2d
+            - Historical data: 1940 até hoje-30d (modo historical_email)
             - Best match model: Seleciona melhor modelo disponível
             - 10 climate variables com unidades padronizadas
             - Redis cache compartilhado entre workers
@@ -66,7 +66,7 @@ class OpenMeteoArchiveSyncAdapter:
         cache_type = "Redis" if cache else "Local"
         logger.info(
             f"OpenMeteoArchiveSyncAdapter initialized ({cache_type} cache, "
-            f"1940 to today-2d)"
+            f"1940 to today-30d)"
         )
 
     def get_daily_data_sync(
@@ -101,15 +101,6 @@ class OpenMeteoArchiveSyncAdapter:
             start_date = datetime.fromisoformat(start_date)
         if isinstance(end_date, str):
             end_date = datetime.fromisoformat(end_date)
-
-        # Validação - Archive has 2-day delay (dados consolidados)
-        max_date = datetime.now() - timedelta(days=2)
-        if end_date > max_date:
-            logger.warning(
-                f"Archive: ajustando end_date de {end_date.date()} "
-                f"para {max_date.date()} (2-day delay para dados consolidados)"
-            )
-            end_date = max_date
 
         # Executar async de forma segura
         try:
